@@ -61,11 +61,10 @@ async function main() {
         },
     })
 
-    const a = src.pipeThrough(finalizer())
+    const a = src.pipeThrough(finalizer()).pipeThrough(createProgressTracker('solana'))
 
     await a.pipeTo(
         new DataTarget({
-            finalized: true,
             writer: async () => {
                 return {
                     offset: undefined,
@@ -121,7 +120,9 @@ function createStateTarget<T extends Data<any, any>>(opts: {
     })
 }
 
-function createProgressTracker<T extends Data<any, {number: number}>>(prefix: string): DataDuplexFactory<T, T> {
+function createProgressTracker<T extends Data<any, {number: number}>, TFinalized extends boolean = boolean>(
+    prefix: string,
+): DataDuplexFactory<T, T, TFinalized, TFinalized> {
     const logger = createLogger(`sqd:${prefix}`)
 
     return transformer({

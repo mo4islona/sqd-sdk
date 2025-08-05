@@ -415,23 +415,23 @@ export function target<TData extends Data>(
     return new DataTarget(config)
 }
 
-export interface DataTransformer<T extends Data, U extends Data> {
-    offset: T['ref'] | undefined
-    transform: (batch: DataBatch<T>) => Promise<DataBatch<U>>
-    fork?: (fork: DataFork<T>) => Promise<DataFork<U> | undefined>
+export interface DataTransformer<TData extends Data, UData extends Data> {
+    offset: TData['ref'] | undefined
+    transform: (batch: DataBatch<TData>) => Promise<DataBatch<UData>>
+    fork?: (fork: DataFork<TData>) => Promise<DataFork<UData> | undefined>
 }
 
-export interface TransformerOptions<T extends Data> {
-    offset: T['ref'] | undefined
+export interface TransformerOptions<TData extends Data> {
+    offset: TData['ref'] | undefined
 }
 
-export interface TransformerConfig<T extends Data, U extends Data> {
-    transformer: (opts: TransformerOptions<U>) => PromiseLike<DataTransformer<T, U>>
+export interface TransformerConfig<TData extends Data, UData extends Data> {
+    transformer: (opts: TransformerOptions<UData>) => PromiseLike<DataTransformer<TData, UData>>
 }
 
-export function transformer<TData extends Data, UData extends Data>(
+export function transformer<TData extends Data, UData extends Data, TFinalized extends boolean = boolean>(
     config: TransformerConfig<TData, UData>,
-): DataDuplexFactory<TData, UData, boolean, boolean> {
+): DataDuplexFactory<TData, UData, TFinalized, TFinalized> {
     return (parent) => {
         const queue = new SyncQueue<DataBatch<UData>>()
         let offsetFuture: Future<UData['ref'] | undefined> = createFuture()
@@ -484,7 +484,7 @@ export function transformer<TData extends Data, UData extends Data>(
         return {
             target,
             source,
-        }
+        } as any
     }
 }
 
