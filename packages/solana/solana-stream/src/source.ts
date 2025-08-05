@@ -6,6 +6,7 @@ import {
     ForkException,
     type Data,
     DataSource,
+    source,
 } from '@sqd-sdk/core/pipeline'
 import {cast} from '@sqd-sdk/core/validation'
 import {
@@ -66,8 +67,8 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
         }
     }
 
-    return new DataSource<SolanaPortalData<Q>>({
-        unfinalized: true,
+    return source({
+        finalized: false,
         reader: async (opts) => {
             const stream = createDataStream(opts.offset)
 

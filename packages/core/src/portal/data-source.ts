@@ -1,6 +1,14 @@
 import {assert, last} from '../internal/misc'
 import {Throttler} from '../internal/throttler'
-import {type Data, type DataBatch, DataRef, DataSource, ForkException, type UnfinalizedDataSource} from '../pipeline'
+import {
+    type Data,
+    type DataBatch,
+    DataRef,
+    DataSource,
+    ForkException,
+    source,
+    type UnfinalizedDataSource,
+} from '../pipeline'
 import {
     isForkException,
     PortalClient,
@@ -69,9 +77,7 @@ export function portalDataSource<T extends Data<any, BlockRef_>>(
 
                     const offset = last(data).ref
                     const head = calculateHead(new BlockId(portalHead), offset)
-                    const finalizedHead = batch.finalizedHead
-                        ? calculateHead(new BlockId(batch.finalizedHead), offset)
-                        : undefined
+                    const finalizedHead = batch.finalizedHead ? new BlockId(batch.finalizedHead) : undefined
 
                     yield {
                         data,
@@ -94,8 +100,8 @@ export function portalDataSource<T extends Data<any, BlockRef_>>(
         }
     }
 
-    return new DataSource<T>({
-        unfinalized: true,
+    return new DataSource({
+        finalized: false,
         reader: async (opts) => {
             const stream = createDataStream(opts.offset)
 

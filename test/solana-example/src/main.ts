@@ -10,6 +10,9 @@ import {
     type UnfinalizedDataSource,
     type DataDuplexFactory,
     finalizer,
+    type FinalizedDataTarget,
+    type FinalizedDataSource,
+    type DataDuplex,
 } from '@sqd-sdk/core/pipeline'
 import {PortalClient} from '@sqd-sdk/core/portal'
 import {type SolanaPortalData, solanaPortalDataSource} from '@sqd-sdk/solana-stream'
@@ -58,22 +61,20 @@ async function main() {
         },
     })
 
-    await src
-        .pipeThrough(createProgressTracker('solana'))
-        .pipeThrough(finalizer())
-        .pipeThrough(createProgressTracker('solana:finalized'))
-        .pipeTo(
-            new DataTarget({
-                unfinalized: true,
-                writer: async () => {
-                    return {
-                        offset: undefined,
-                        write: async (batch) => batch.offset,
-                        fork: async (fork) => fork.heads[fork.heads.length - 1],
-                    }
-                },
-            }),
-        )
+    const a = src.pipeThrough(finalizer())
+
+    await a.pipeTo(
+        new DataTarget({
+            finalized: true,
+            writer: async () => {
+                return {
+                    offset: undefined,
+                    write: async (batch) => batch.offset,
+                    fork: async (fork) => fork.heads[fork.heads.length - 1],
+                }
+            },
+        }),
+    )
 }
 
 interface StateManager<T extends Data<any, any>> {
@@ -90,7 +91,7 @@ function createStateTarget<T extends Data<any, any>>(opts: {
     const {state, transact, rollback} = opts
 
     return new DataTarget<T>({
-        unfinalized: true,
+        finalized: false,
         writer: async () => {
             const head = await state.get()
             if (head) {
@@ -120,24 +121,19 @@ function createStateTarget<T extends Data<any, any>>(opts: {
     })
 }
 
-function createProgressTracker<T extends Data<any, {number: number}>>(
-    prefix: string,
-): DataDuplexFactory<{
-    target: UnfinalizedDataTarget<T>
-    source: UnfinalizedDataSource<T>
-}> {
+function createProgressTracker<T extends Data<any, {number: number}>>(prefix: string): DataDuplexFactory<T, T> {
     const logger = createLogger(`sqd:${prefix}`)
 
-    return transformer<T, T>({
+    return transformer({
         transformer: async (opts) => {
             return {
                 offset: opts.offset,
                 transform: async (batch) => {
                     if (batch.data.length > 0) {
-                        const {offset, head} = batch
+                        const {offset, head, finalizedHead} = batch
                         logger.info(
                             [
-                                `progress: ${offset.value.number} / ${head.value.number}`,
+                                `progress: ${offset.value.number} / ${head.value.number} (${finalizedHead?.value.number ?? 0})`,
                                 `blocks: ${batch.data.length}`,
                             ].join(', '),
                         )

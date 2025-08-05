@@ -1,6 +1,6 @@
-export interface DataRef<T> {
-    readonly value: T
-    compare(other: DataRef<T>): DataRef.CompareResult
+export interface DataRef<TValue> {
+    readonly value: TValue
+    compare(other: DataRef<TValue>): DataRef.CompareResult
 }
 
 export namespace DataRef {
@@ -45,18 +45,18 @@ export namespace DataRef {
     export const Fork = new CompareResult(Compare.Fork)
 }
 
-export interface Data<V = unknown, R = unknown> {
-    value: V
-    ref: DataRef<R>
+export interface Data<TValue = unknown, TRef = unknown> {
+    value: TValue
+    ref: DataRef<TRef>
 }
 
-export interface DataBatch<T extends Data> {
-    readonly data: T[]
-    readonly finalizedHead: T['ref'] | undefined
-    readonly head: T['ref']
-    readonly offset: T['ref']
+export interface DataBatch<TData extends Data> {
+    readonly data: TData[]
+    readonly finalizedHead: TData['ref'] | undefined
+    readonly head: TData['ref']
+    readonly offset: TData['ref']
 }
 
-export interface DataFork<T extends Data> {
-    readonly heads: T['ref'][]
+export interface DataFork<TData extends Data> {
+    readonly heads: TData['ref'][]
 }
