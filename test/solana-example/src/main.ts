@@ -9,6 +9,7 @@ import {
     transformer,
     type UnfinalizedDataSource,
     type DataDuplexFactory,
+    finalizer,
 } from '@sqd-sdk/core/pipeline'
 import {PortalClient} from '@sqd-sdk/core/portal'
 import {type SolanaPortalData, solanaPortalDataSource} from '@sqd-sdk/solana-stream'
@@ -57,18 +58,22 @@ async function main() {
         },
     })
 
-    await src.pipeThrough(createProgressTracker('solana')).pipeTo(
-        new DataTarget({
-            unfinalized: true,
-            writer: async () => {
-                return {
-                    offset: undefined,
-                    write: async (batch) => batch.offset,
-                    fork: async (fork) => fork.heads[fork.heads.length - 1],
-                }
-            },
-        }),
-    )
+    await src
+        .pipeThrough(createProgressTracker('solana'))
+        .pipeThrough(finalizer())
+        .pipeThrough(createProgressTracker('solana:finalized'))
+        .pipeTo(
+            new DataTarget({
+                unfinalized: true,
+                writer: async () => {
+                    return {
+                        offset: undefined,
+                        write: async (batch) => batch.offset,
+                        fork: async (fork) => fork.heads[fork.heads.length - 1],
+                    }
+                },
+            }),
+        )
 }
 
 interface StateManager<T extends Data<any, any>> {

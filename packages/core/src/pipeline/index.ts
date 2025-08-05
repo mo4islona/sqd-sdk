@@ -486,15 +486,17 @@ export function finalizer<T extends Data>(): {target: UnfinalizedDataTarget<T>; 
                             if (batch.finalizedHead.compare(ref).isLess) break
                         }
 
-                        const data = buffer.slice(0, unfinalizedIndex)
+                        const data = buffer.splice(0, unfinalizedIndex)
                         const offset = data[data.length - 1].ref
 
-                        await queue.put({
-                            data,
-                            offset,
-                            finalizedHead: batch.finalizedHead,
-                            head: batch.finalizedHead,
-                        })
+                        if (data.length > 0) {
+                            await queue.put({
+                                data,
+                                offset,
+                                finalizedHead: batch.finalizedHead,
+                                head: batch.finalizedHead,
+                            })
+                        }
                     }
 
                     return batch.offset
