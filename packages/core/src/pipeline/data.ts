@@ -9,7 +9,7 @@ export interface Data<V = any, R = any> {
 
 export interface DataBatch<T extends Data> {
     readonly data: T[]
-    readonly finalizedHead?: T['ref'] | undefined
+    readonly finalizedHead: T['ref'] | undefined
     readonly head: T['ref']
     readonly offset: T['ref']
 }
