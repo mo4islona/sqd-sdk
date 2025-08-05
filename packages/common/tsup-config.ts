@@ -46,6 +46,7 @@ export function getDevBaseTsupConfig(basePath: string): Options {
         clean: true,
         splitting: false,
         sourcemap: true,
+        dts: true,
         outExtension({format}) {
             return {
                 js: format === 'cjs' ? '.cjs' : '.js',
