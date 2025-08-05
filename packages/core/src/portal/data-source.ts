@@ -1,13 +1,6 @@
 import {assert, last} from '../internal/misc'
 import {Throttler} from '../internal/throttler'
-import {
-    type Data,
-    type DataBatch,
-    type DataRef,
-    DataSource,
-    ForkException,
-    type UnfinalizedDataSource,
-} from '../pipeline'
+import {type Data, type DataBatch, DataRef, DataSource, ForkException, type UnfinalizedDataSource} from '../pipeline'
 import {
     isForkException,
     PortalClient,
@@ -26,25 +19,24 @@ export class BlockId implements DataRef<BlockRef_> {
         return new BlockId(block.header)
     }
 
-    readonly number: number
-    readonly hash?: string
+    constructor(readonly value: BlockRef_) {}
 
-    constructor(value: BlockRef_) {
-        this.number = value.number
-        this.hash = value.hash
-    }
-
-    compare(other: BlockRef_) {
-        return this.number - other.number
+    compare(other: BlockId): DataRef.CompareResult {
+        if (this.value.number < other.value.number) return DataRef.Less
+        if (this.value.number > other.value.number) return DataRef.Greater
+        if (this.value.hash !== other.value.hash) return DataRef.Fork
+        return DataRef.Equal
     }
 }
 
 function calculateHead(portalHead: BlockId, lastBlock: BlockId | undefined): BlockId {
     if (!lastBlock) return portalHead
-    return lastBlock.compare(portalHead) > 0 ? lastBlock : portalHead
+    return lastBlock.compare(portalHead).isGreater ? lastBlock : portalHead
 }
 
-export function portalDataSource<T extends Data>(options: PortalDataSourceOptions): UnfinalizedDataSource<T> {
+export function portalDataSource<T extends Data<any, BlockRef_>>(
+    options: PortalDataSourceOptions,
+): UnfinalizedDataSource<T> {
     const portal = options.portal instanceof PortalClient ? options.portal : new PortalClient(options.portal)
     const headThrottler = new Throttler(async () => portal.getHead(), 5_000)
 
@@ -52,8 +44,8 @@ export function portalDataSource<T extends Data>(options: PortalDataSourceOption
         let parentBlockHash: string | undefined
         let fromBlock = options.query.fromBlock ?? 0
         if (offset) {
-            fromBlock = Math.max(offset.number + 1, fromBlock)
-            parentBlockHash = fromBlock === offset.number + 1 ? offset.hash : undefined
+            fromBlock = Math.max(offset.value.number + 1, fromBlock)
+            parentBlockHash = fromBlock === offset.value.number + 1 ? offset.value.hash : undefined
         }
         const toBlock = options.query.toBlock
 
@@ -70,13 +62,10 @@ export function portalDataSource<T extends Data>(options: PortalDataSourceOption
                     const portalHead = await headThrottler.get()
                     if (!portalHead) continue // no data?
 
-                    // FIXME: investigate type issue
-                    const data = batch.blocks.map((value) => {
-                        return {
-                            value,
-                            ref: BlockId.fromBlock(value),
-                        }
-                    }) as T[]
+                    const data = batch.blocks.map((value) => ({
+                        value,
+                        ref: BlockId.fromBlock(value),
+                    })) as T[]
 
                     const offset = last(data).ref
                     const head = calculateHead(new BlockId(portalHead), offset)
@@ -91,8 +80,8 @@ export function portalDataSource<T extends Data>(options: PortalDataSourceOption
                         offset,
                     }
 
-                    fromBlock = offset.number + 1
-                    parentBlockHash = offset.hash
+                    fromBlock = offset.value.number + 1
+                    parentBlockHash = offset.value.hash
                 }
             } catch (err) {
                 if (isForkException(err)) {

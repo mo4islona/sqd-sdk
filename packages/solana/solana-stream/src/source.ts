@@ -19,7 +19,13 @@ import {
 import {getDataSchema} from './schema'
 import {setUpRelations} from './objects/relations'
 import {mergeDataRequests, type SolanaQueryOptions} from './query'
-import {type BlockRef, type PortalClient, type PortalClientOptions, portalDataSource} from '@sqd-sdk/core/portal'
+import {
+    type BlockId,
+    type BlockRef,
+    type PortalClient,
+    type PortalClientOptions,
+    portalDataSource,
+} from '@sqd-sdk/core/portal'
 import {type MergeSelection, mergeSelection} from '@sqd-sdk/core/internal/selection'
 import {assert, last} from '@sqd-sdk/core/internal/misc'
 import {Throttler} from '@sqd-sdk/core/internal/throttler'
@@ -39,10 +45,8 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
     const fields = getFields(options.query.fields)
     const requests = mergeRangeRequests(options.query.requests, mergeDataRequests)
 
-    const createDataStream = async function* (
-        offset?: BlockRef,
-    ): AsyncIterableIterator<DataBatch<SolanaPortalData<Q>>> {
-        const requestsBounded = offset ? applyRangeBound(requests, {from: offset.number + 1}) : requests
+    const createDataStream = async function* (offset?: BlockId): AsyncIterableIterator<DataBatch<SolanaPortalData<Q>>> {
+        const requestsBounded = offset ? applyRangeBound(requests, {from: offset.value.number + 1}) : requests
 
         for (const request of requestsBounded) {
             for await (const data of portalDataSource({

@@ -22,7 +22,7 @@ async function main() {
         minBytes: 100 * 1024 * 1024,
     })
 
-    let fromBlock = await portal.getHead().then((h) => (h?.number ?? 0) - 50_000)
+    let fromBlock = await portal.getHead().then((h) => (h?.number ?? 0) - 100_000)
 
     const src = solanaPortalDataSource({
         portal,
@@ -63,12 +63,8 @@ async function main() {
             writer: async () => {
                 return {
                     offset: undefined,
-                    write: async (batch) => {
-                        return batch.offset
-                    },
-                    fork: async (fork) => {
-                        return fork.heads[0]
-                    },
+                    write: async (batch) => batch.offset,
+                    fork: async (fork) => fork.heads[fork.heads.length - 1],
                 }
             },
         }),
@@ -104,6 +100,8 @@ function createStateTarget<T extends Data<any, any>>(opts: {
                     if (batch.data.length > 0) {
                         await state.set(batch.data[batch.data.length - 1].ref)
                     }
+
+                    return batch.offset
                 },
                 fork: async (fork) => {
                     const newHead = await state.fork(fork.heads)
@@ -134,7 +132,7 @@ function createProgressTracker<T extends Data<any, {number: number}>>(
                         const {offset, head} = batch
                         logger.info(
                             [
-                                `[${new Date().toISOString()}] progress: ${offset.number} / ${head.number}`,
+                                `progress: ${offset.value.number} / ${head.value.number}`,
                                 `blocks: ${batch.data.length}`,
                             ].join(', '),
                         )

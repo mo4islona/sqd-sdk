@@ -137,19 +137,19 @@ export const DataSource: {
         return {
             [Symbol.asyncIterator]: () => ({
                 next: async (): Promise<IteratorResult<DataBatch<T>>> => {
+                    if (this._abortController?.signal.aborted) {
+                        await reader?.close?.().catch(() => {})
+                        if (this._state === 'locked') {
+                            this._state = 'opened'
+                        }
+                        throw this._abortController.signal.reason
+                    }
+
+                    if (!reader) {
+                        reader = await this._reader(opts)
+                    }
+
                     try {
-                        if (this._abortController?.signal.aborted) {
-                            await reader?.close?.().catch(() => {})
-                            if (this._state === 'locked') {
-                                this._state = 'opened'
-                            }
-                            throw this._abortController.signal.reason
-                        }
-
-                        if (!reader) {
-                            reader = await this._reader(opts)
-                        }
-
                         const batch = await reader.read()
                         if (!batch) {
                             return {done: true, value: undefined}
@@ -215,7 +215,7 @@ export const DataSource: {
     async *[Symbol.asyncIterator](): AsyncIterableIterator<T['value']> {
         for await (const batch of this.read()) {
             for (const data of batch.data) {
-                yield data.value
+                yield data.value as T['value']
             }
         }
     }
@@ -243,27 +243,27 @@ export interface FinalizedDataTargetConfig<T extends Data> {
     unfinalized: false
 }
 
-function validateBatch(offset: DataRef<any> | undefined, batch: DataBatch<any>) {
-    if (offset && batch.offset.compare(offset) < 0) {
+function validateBatch<T extends Data>(offset: T['ref'] | undefined, batch: DataBatch<T>) {
+    if (offset && batch.offset.compare(offset).isLess) {
         throw new Error('New offset is below the previous offset')
     }
 
     for (const item of batch.data) {
-        if (offset && item.ref.compare(offset) <= 0) {
-            throw new Error('Item is below the previous item')
+        if (offset && item.ref.compare(offset).isLessOrEqual) {
+            throw new Error('Item is below or equal to the previous item')
         }
         offset = item.ref
     }
 
-    if (offset && batch.head.compare(offset) < 0) {
+    if (offset && batch.head.compare(offset).isLess) {
         throw new Error('Head is below the data')
     }
 
-    if (batch.finalizedHead && batch.head.compare(batch.finalizedHead) < 0) {
+    if (batch.finalizedHead && batch.head.compare(batch.finalizedHead).isLess) {
         throw new Error('Head is below the finalized head')
     }
 
-    if (batch.head.compare(batch.offset) < 0) {
+    if (batch.head.compare(batch.offset).isLess) {
         throw new Error('Head is below the offset')
     }
 }
@@ -314,7 +314,7 @@ export const DataTarget: {
                     try {
                         while (true) {
                             if (this._abortController?.signal.aborted) {
-                                await stream.return?.()
+                                await stream.throw?.(this._abortController.signal.reason)
                                 throw this._abortController.signal.reason
                             }
 
@@ -328,7 +328,7 @@ export const DataTarget: {
                             // it means that the batch was not fully consumed or we want to skip
                             // so we break the current stream and start from the new offset
                             // FIXME: Do we want this behavior?
-                            if (!offset || offset.compare(batch.offset) !== 0) {
+                            if (!offset || !offset.compare(batch.offset).isEqual) {
                                 isRetry = true
                                 break
                             }
@@ -389,7 +389,7 @@ export function target<T extends Data>(
 export interface DataTransformer<T extends Data, U extends Data> {
     offset: T['ref'] | undefined
     transform: (batch: DataBatch<T>) => Promise<DataBatch<U>>
-    fork?: (fork: DataFork<T>) => Promise<DataFork<U>>
+    fork?: (fork: DataFork<T>) => Promise<DataFork<U> | undefined>
 }
 
 export interface TransformerOptions<T extends Data> {
@@ -430,8 +430,8 @@ export function transformer<T extends Data, U extends Data>(
                         await queue.put(data)
                         return batch.offset
                     },
-                    async fork(fork: DataFork<T>): Promise<DataFork<U> | undefined> {
-                        return transformer.fork?.(fork)
+                    async fork(fork: DataFork<T>) {
+                        return undefined
                     },
                     async close(): Promise<void> {
                         queue.close()
@@ -483,7 +483,7 @@ export function finalizer<T extends Data>(): {target: UnfinalizedDataTarget<T>; 
                         let unfinalizedIndex = 0
                         for (; unfinalizedIndex < buffer.length; unfinalizedIndex++) {
                             const ref = buffer[unfinalizedIndex].ref
-                            if (batch.head.compare(ref) !== 'gt') break
+                            if (batch.finalizedHead.compare(ref).isLess) break
                         }
 
                         const data = buffer.slice(0, unfinalizedIndex)
@@ -499,7 +499,7 @@ export function finalizer<T extends Data>(): {target: UnfinalizedDataTarget<T>; 
 
                     return batch.offset
                 },
-                async fork(fork: DataFork<T>): Promise<DataRef<T> | undefined> {
+                async fork(fork: DataFork<T>): Promise<T['ref'] | undefined> {
                     return undefined
                 },
                 async close(): Promise<void> {
