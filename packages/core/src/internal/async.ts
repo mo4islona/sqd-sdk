@@ -166,31 +166,66 @@ export class SyncQueue<T> {
     }> = []
 
     private pendingTakes: Array<{
-        resolve: (value: T) => void
+        resolve: (value: T | undefined) => void
     }> = []
 
+    private closed = false
+
     async put(value: T): Promise<void> {
+        if (this.closed) {
+            throw new ClosedQueueError()
+        }
+
         const pendingTake = this.pendingTakes.shift()
         if (pendingTake) {
             pendingTake.resolve(value)
             return
         }
 
-        return new Promise<void>((resolve) => {
+        return new Promise<void>((resolve, reject) => {
+            if (this.closed) {
+                reject(new ClosedQueueError())
+                return
+            }
             this.pendingPuts.push({value, resolve})
         })
     }
 
-    async take(): Promise<T> {
+    async take(): Promise<T | undefined> {
         const pendingPut = this.pendingPuts.shift()
         if (pendingPut) {
             pendingPut.resolve()
             return pendingPut.value
         }
 
-        return new Promise<T>((resolve) => {
+        if (this.closed) {
+            return undefined
+        }
+
+        return new Promise<T | undefined>((resolve) => {
+            if (this.closed) {
+                resolve(undefined)
+                return
+            }
             this.pendingTakes.push({resolve})
         })
+    }
+
+    close(): void {
+        if (this.closed) return
+        this.closed = true
+
+        // Reject all pending puts
+        for (const pendingPut of this.pendingPuts) {
+            pendingPut.resolve() // Resolve puts to avoid hanging
+        }
+        this.pendingPuts.length = 0
+
+        // Resolve all pending takes with undefined
+        for (const pendingTake of this.pendingTakes) {
+            pendingTake.resolve(undefined)
+        }
+        this.pendingTakes.length = 0
     }
 }
 

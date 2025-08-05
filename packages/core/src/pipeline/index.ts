@@ -1,5 +1,4 @@
 import {createFuture, type Future, SyncQueue} from '../internal/async'
-import {withAbort} from '../internal/misc'
 import {isForkException} from './errors'
 import type {Data, DataBatch, DataFork, DataRef} from './data'
 
@@ -112,6 +111,7 @@ export const DataSource: {
     private _state: 'opened' | 'locked' | 'closed' = 'opened'
     private _abortController: AbortController | undefined
     private _reader: (opts: DataReaderOptions<T>) => PromiseLike<DataReader<T>>
+    private _closePromise: Promise<void> | undefined
 
     constructor(config: FinalizedDataSourceConfig<T> | UnfinalizedDataSourceConfig<T>) {
         const {reader, unfinalized} = config
@@ -120,7 +120,7 @@ export const DataSource: {
         this._reader = reader
     }
 
-    async *read(opts: DataReaderOptions<T> = {}): AsyncIterable<DataBatch<T>> {
+    read(opts: DataReaderOptions<T> = {}): AsyncIterable<DataBatch<T>> {
         if (this._state === 'closed') {
             throw new Error('DataSource is already closed')
         }
@@ -131,25 +131,55 @@ export const DataSource: {
         this._state = 'locked'
 
         this._abortController = new AbortController()
-        const reader = await this._reader(opts)
-        try {
-            while (true) {
-                const batch = await withAbort(() => reader.read(), this._abortController.signal)
-                if (!batch) break
-                yield batch
-            }
-        } catch (err) {
-            if (!isForkException<T>(err)) throw err
-            if (!this.unfinalized) {
-                throw new TypeError('Got fork exception in finalized DataSource')
-            }
-            throw err
-        } finally {
-            await reader.close?.().catch(() => {})
-            this._abortController = undefined
-            if (this._state === 'locked') {
-                this._state = 'opened'
-            }
+
+        let reader: DataReader<T> | undefined
+
+        return {
+            [Symbol.asyncIterator]: () => ({
+                next: async (): Promise<IteratorResult<DataBatch<T>>> => {
+                    try {
+                        if (this._abortController?.signal.aborted) {
+                            await reader?.close?.().catch(() => {})
+                            if (this._state === 'locked') {
+                                this._state = 'opened'
+                            }
+                            throw this._abortController.signal.reason
+                        }
+
+                        if (!reader) {
+                            reader = await this._reader(opts)
+                        }
+
+                        const batch = await reader.read()
+                        if (!batch) {
+                            return {done: true, value: undefined}
+                        }
+                        return {done: false, value: batch}
+                    } catch (err) {
+                        if (!isForkException<T>(err)) throw err
+                        if (!this.unfinalized) {
+                            throw new TypeError('Got fork exception in finalized DataSource')
+                        }
+                        throw err
+                    }
+                },
+                return: async (): Promise<IteratorResult<DataBatch<T>>> => {
+                    await reader?.close?.().catch(() => {})
+                    this._abortController = undefined
+                    if (this._state === 'locked') {
+                        this._state = 'opened'
+                    }
+                    return {done: true, value: undefined}
+                },
+                throw: async (err) => {
+                    await reader?.close?.().catch(() => {})
+                    this._abortController = undefined
+                    if (this._state === 'locked') {
+                        this._state = 'opened'
+                    }
+                    throw err
+                },
+            }),
         }
     }
 
@@ -169,7 +199,15 @@ export const DataSource: {
     }
 
     async close(reason?: any): Promise<void> {
-        if (this._state === 'closed') return
+        if (this._state === 'closed') {
+            return this._closePromise
+        }
+
+        this._closePromise = this._closePromise || this._performClose(reason)
+        return this._closePromise
+    }
+
+    private async _performClose(reason?: any): Promise<void> {
         this._state = 'closed'
         this._abortController?.abort(reason)
     }
@@ -241,6 +279,7 @@ export const DataTarget: {
     private _state: 'opened' | 'locked' | 'closed' = 'opened'
     private _abortController: AbortController | undefined
     private _writer: (opts: DataWriterOptions<T>) => PromiseLike<DataWriter<T>>
+    private _closePromise: Promise<void> | undefined
 
     constructor(config: FinalizedDataTargetConfig<T> | UnfinalizedDataTargetConfig<T>) {
         this.unfinalized = config.unfinalized !== false
@@ -261,14 +300,27 @@ export const DataTarget: {
         this._abortController = new AbortController()
         const writer = await this._writer(opts)
         try {
-            await withAbort(async () => {
-                let offset = writer.offset
-                let isRetry: boolean
-                while (true) {
-                    // FIXME: really bad
-                    isRetry = false
+            let offset = writer.offset
+            let isRetry: boolean
+            while (true) {
+                if (this._abortController?.signal.aborted) {
+                    throw this._abortController.signal.reason
+                }
+
+                // FIXME: really bad
+                isRetry = false
+                try {
+                    const stream = opts.read({offset})[Symbol.asyncIterator]()
                     try {
-                        for await (const batch of opts.read({offset})) {
+                        while (true) {
+                            if (this._abortController?.signal.aborted) {
+                                await stream.return?.()
+                                throw this._abortController.signal.reason
+                            }
+
+                            const {done, value: batch} = await stream.next()
+                            if (done) break
+
                             validateBatch(offset, batch)
 
                             offset = await writer.write(batch, offset)
@@ -281,21 +333,25 @@ export const DataTarget: {
                                 break
                             }
                         }
-                        if (!isRetry) break
+                        await stream.return?.()
                     } catch (err) {
-                        if (!isForkException<T>(err)) throw err
-                        if (!this.unfinalized) {
-                            throw new TypeError('Got fork exception in finalized DataTarget')
-                        }
-                        if (!writer.fork) {
-                            throw new TypeError('Missing fork method in unfinalized DataWriter')
-                        }
-                        offset = await writer.fork(err.fork, offset)
+                        await stream.throw?.(err)
+                        throw err
                     }
+                    if (!isRetry) break
+                } catch (err) {
+                    if (!isForkException<T>(err)) throw err
+                    if (!this.unfinalized) {
+                        throw new TypeError('Got fork exception in finalized DataTarget')
+                    }
+                    if (!writer.fork) {
+                        throw new TypeError('Missing fork method in unfinalized DataWriter')
+                    }
+                    offset = await writer.fork(err.fork, offset)
                 }
-            }, this._abortController.signal)
+            }
         } finally {
-            await writer.close?.()
+            await writer.close?.().catch(() => {})
             this._abortController = undefined
             if (this._state === 'locked') {
                 this._state = 'opened'
@@ -304,7 +360,15 @@ export const DataTarget: {
     }
 
     async close(reason?: any): Promise<void> {
-        if (this._state === 'closed') return
+        if (this._state === 'closed') {
+            return this._closePromise
+        }
+
+        this._closePromise = this._closePromise || this._performClose(reason)
+        return this._closePromise
+    }
+
+    private async _performClose(reason?: any): Promise<void> {
         this._state = 'closed'
         this._abortController?.abort(reason)
     }
@@ -370,7 +434,8 @@ export function transformer<T extends Data, U extends Data>(
                         return transformer.fork?.(fork)
                     },
                     async close(): Promise<void> {
-                        await source.close()
+                        queue.close()
+                        await source.close().catch(() => {})
                     },
                 }
             },
@@ -386,7 +451,8 @@ export function transformer<T extends Data, U extends Data>(
                         return await queue.take()
                     },
                     async close(): Promise<void> {
-                        await target.close()
+                        queue.close()
+                        await target.close().catch(() => {})
                     },
                 }
             },
@@ -437,7 +503,8 @@ export function finalizer<T extends Data>(): {target: UnfinalizedDataTarget<T>; 
                     return undefined
                 },
                 async close(): Promise<void> {
-                    await target.close()
+                    queue.close()
+                    await source.close().catch(() => {})
                 },
             }
         },
@@ -453,7 +520,8 @@ export function finalizer<T extends Data>(): {target: UnfinalizedDataTarget<T>; 
                     return await queue.take()
                 },
                 async close(): Promise<void> {
-                    await target.close()
+                    queue.close()
+                    await target.close().catch(() => {})
                 },
             }
         },
