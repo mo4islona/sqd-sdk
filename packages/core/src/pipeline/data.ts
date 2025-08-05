@@ -4,38 +4,45 @@ export interface DataRef<T> {
 }
 
 export namespace DataRef {
+    export enum Compare {
+        Equal = 0,
+        Less = 1,
+        Greater = 2,
+        Fork = 3,
+    }
+
     export class CompareResult {
-        constructor(readonly value: 'eq' | 'lt' | 'gt' | 'fk') {}
+        constructor(readonly value: Compare) {}
 
         get isFork() {
-            return this.value === 'fk'
+            return this.value === Compare.Fork
         }
 
         get isLess() {
-            return this.value === 'lt'
+            return this.value === Compare.Less
         }
 
         get isGreater() {
-            return this.value === 'gt'
+            return this.value === Compare.Greater
         }
 
         get isEqual() {
-            return this.value === 'eq'
+            return this.value === Compare.Equal
         }
 
         get isLessOrEqual() {
-            return this.value === 'lt' || this.value === 'eq'
+            return this.value === Compare.Less || this.value === Compare.Equal
         }
 
         get isGreaterOrEqual() {
-            return this.value === 'gt' || this.value === 'eq'
+            return this.value === Compare.Greater || this.value === Compare.Equal
         }
     }
 
-    export const Less = new CompareResult('lt')
-    export const Greater = new CompareResult('gt')
-    export const Equal = new CompareResult('eq')
-    export const Fork = new CompareResult('fk')
+    export const Less = new CompareResult(Compare.Less)
+    export const Greater = new CompareResult(Compare.Greater)
+    export const Equal = new CompareResult(Compare.Equal)
+    export const Fork = new CompareResult(Compare.Fork)
 }
 
 export interface Data<V = unknown, R = unknown> {
