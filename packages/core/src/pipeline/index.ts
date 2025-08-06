@@ -1,6 +1,6 @@
 import {createFuture, type Future, SyncQueue} from '../internal/async'
 import {isForkException} from './errors'
-import type {Data, DataBatch, DataFork, DataRef} from './data'
+import type {Data, DataBatch, DataFork} from './data'
 
 export * from './errors'
 export * from './data'
@@ -48,7 +48,7 @@ export interface DataWriterOptions<TData extends Data> {
 export interface DataWriterWriteOptions<TData extends Data> {}
 
 export interface FinalizedDataWriter<TData extends Data> {
-    offset: TData['ref'] | undefined
+    readonly offset: TData['ref'] | undefined
     write(batch: DataBatch<TData>, offset: TData['ref'] | undefined): Promise<TData['ref']>
     fork?(fork: DataFork<TData>, offset: TData['ref'] | undefined): Promise<TData['ref'] | undefined>
     close?(): Promise<unknown>
@@ -67,13 +67,13 @@ export type DataTarget<TData extends Data = Data, TFinalized extends boolean = b
       : UnfinalizedDataTarget<TData> | FinalizedDataTarget<TData>
 
 export interface UnfinalizedDataTarget<TData extends Data> {
-    finalized: false
+    readonly finalized: false
     write(opts: DataWriterOptions<TData>): Promise<void>
     close(): Promise<void>
 }
 
 export interface FinalizedDataTarget<TData extends Data> {
-    finalized: true
+    readonly finalized: true
     write(opts: DataWriterOptions<TData>): Promise<void>
     close(): Promise<void>
 }
@@ -93,7 +93,7 @@ export type DataDuplexFactory<
     UData extends Data,
     TFinalized extends boolean = boolean,
     UFinalized extends boolean = boolean,
-> = (source: DataSource<TData>) => DataDuplex<TData, UData, TFinalized, UFinalized>
+> = (opts: {finalized: TFinalized}) => DataDuplex<TData, UData, TFinalized, UFinalized>
 
 export type PipableThrough<
     TData extends Data,
@@ -127,11 +127,11 @@ export interface UnfinalizedDataSourceConfig<T extends Data> {
 
 // NOTE: workaround to allow constructor overloading
 export const DataSource: {
-    new <TData extends Data>(config: UnfinalizedDataSourceConfig<TData>): DataSource<TData, false>
-    new <TData extends Data>(config: FinalizedDataSourceConfig<TData>): DataSource<TData, true>
-    new <TData extends Data>(
+    new <TData extends Data>(config: UnfinalizedDataSourceConfig<TData>): UnfinalizedDataSource<TData>
+    new <TData extends Data>(config: FinalizedDataSourceConfig<TData>): FinalizedDataSource<TData>
+    new <TData extends Data, TFinalized extends boolean>(
         config: FinalizedDataSourceConfig<TData> | UnfinalizedDataSourceConfig<TData>,
-    ): DataSource<TData>
+    ): DataSource<TData, TFinalized>
 } = class<TData extends Data> {
     readonly finalized: any // FIXME: how to type this?
 
@@ -266,7 +266,7 @@ export interface UnfinalizedDataTargetConfig<TData extends Data> {
 }
 
 export interface FinalizedDataTargetConfig<TData extends Data> {
-    writer: (opts: DataWriterOptions<TData>) => PromiseLike<DataWriter<TData>>
+    writer: (opts: DataWriterOptions<TData>) => PromiseLike<FinalizedDataWriter<TData>>
     finalized: true
 }
 
@@ -307,7 +307,9 @@ export const DataTarget: {
 
     private _state: 'opened' | 'locked' | 'closed' = 'opened'
     private _abortController: AbortController | undefined
-    private _writer: (opts: DataWriterOptions<TData>) => PromiseLike<DataWriter<TData>>
+    private _writer: (
+        opts: DataWriterOptions<TData>,
+    ) => PromiseLike<FinalizedDataWriter<TData> | UnfinalizedDataWriter<TData>>
     private _closePromise: Promise<void> | undefined
 
     constructor(config: FinalizedDataTargetConfig<TData> | UnfinalizedDataTargetConfig<TData>) {
@@ -325,60 +327,61 @@ export const DataTarget: {
             throw new Error('DataTarget is already locked')
         }
         this._state = 'locked'
-
         this._abortController = new AbortController()
+
         const writer = await this._writer(opts)
-        try {
-            let offset = writer.offset
-            let isRetry: boolean
-            while (true) {
-                if (this._abortController?.signal.aborted) {
-                    throw this._abortController.signal.reason
+        const processData = async (offset: TData['ref'] | undefined): Promise<void> => {
+            this._abortController?.signal.throwIfAborted()
+
+            const stream = opts.read({offset})[Symbol.asyncIterator]()
+            return processStream(stream, writer.offset)
+        }
+
+        const processStream = async (
+            stream: AsyncIterator<DataBatch<TData>>,
+            currentOffset: TData['ref'] | undefined,
+        ): Promise<void> => {
+            this._abortController?.signal.throwIfAborted()
+
+            let batch: DataBatch<TData> | undefined
+            try {
+                const {done, value} = await stream.next()
+                if (done) return
+                batch = value
+            } catch (err) {
+                // FIXME: do we need to return?
+                await stream.return?.().catch(() => {})
+
+                if (!isForkException<TData>(err)) {
+                    throw err
+                }
+                if (this.finalized) {
+                    throw new TypeError('Got fork exception in finalized DataTarget')
+                }
+                if (!writer.fork) {
+                    throw new TypeError('Missing fork method in unfinalized DataWriter')
                 }
 
-                // FIXME: really bad
-                isRetry = false
-                try {
-                    const stream = opts.read({offset})[Symbol.asyncIterator]()
-                    try {
-                        while (true) {
-                            if (this._abortController?.signal.aborted) {
-                                await stream.throw?.(this._abortController.signal.reason)
-                                throw this._abortController.signal.reason
-                            }
-
-                            const {done, value: batch} = await stream.next()
-                            if (done) break
-
-                            validateBatch(offset, batch)
-
-                            offset = await writer.write(batch, offset)
-                            // NOTE: If the offset is not the same as the batch offset,
-                            // it means that the batch was not fully consumed or we want to skip
-                            // so we break the current stream and start from the new offset
-                            // FIXME: Do we want this behavior?
-                            if (!offset || !offset.compare(batch.offset).isEqual) {
-                                isRetry = true
-                                break
-                            }
-                        }
-                        await stream.return?.()
-                    } catch (err) {
-                        await stream.throw?.(err)
-                        throw err
-                    }
-                    if (!isRetry) break
-                } catch (err) {
-                    if (!isForkException<TData>(err)) throw err
-                    if (this.finalized) {
-                        throw new TypeError('Got fork exception in finalized DataTarget')
-                    }
-                    if (!writer.fork) {
-                        throw new TypeError('Missing fork method in unfinalized DataWriter')
-                    }
-                    offset = await writer.fork(err.fork, offset)
-                }
+                const newOffset = await writer.fork(err.fork, writer.offset)
+                return processData(newOffset)
             }
+            validateBatch(currentOffset, batch)
+
+            const newOffset = await writer.write(batch, currentOffset)
+            // NOTE: If the offset is not the same as the batch offset,
+            // it means that the batch was not fully consumed or we want to skip
+            // so we break the current stream and start from the new offset
+            // FIXME: Do we want this behavior?
+            if (!newOffset || !newOffset.compare(batch.offset).isEqual) {
+                await stream.return?.().catch(() => {})
+                return processData(newOffset)
+            }
+
+            return processStream(stream, newOffset)
+        }
+
+        try {
+            await processData(writer.offset)
         } finally {
             await writer.close?.().catch(() => {})
             this._abortController = undefined
@@ -404,8 +407,8 @@ export const DataTarget: {
 }
 
 // FIXME: which approach is better: function or class?
-export function target<TData extends Data>(config: UnfinalizedDataTargetConfig<TData>): DataTarget<TData, false>
-export function target<TData extends Data>(config: FinalizedDataTargetConfig<TData>): DataTarget<TData, true>
+export function target<TData extends Data>(config: UnfinalizedDataTargetConfig<TData>): UnfinalizedDataTarget<TData>
+export function target<TData extends Data>(config: FinalizedDataTargetConfig<TData>): FinalizedDataTarget<TData>
 export function target<TData extends Data>(
     config: FinalizedDataTargetConfig<TData> | UnfinalizedDataTargetConfig<TData>,
 ): DataTarget<TData>
@@ -429,14 +432,14 @@ export interface TransformerConfig<TData extends Data, UData extends Data> {
     transformer: (opts: TransformerOptions<UData>) => PromiseLike<DataTransformer<TData, UData>>
 }
 
-export function transformer<TData extends Data, UData extends Data, TFinalized extends boolean = boolean>(
+export function transformer<TData extends Data, UData extends Data, TFinalized extends boolean>(
     config: TransformerConfig<TData, UData>,
 ): DataDuplexFactory<TData, UData, TFinalized, TFinalized> {
     return (parent) => {
         const queue = new SyncQueue<DataBatch<UData>>()
         let offsetFuture: Future<UData['ref'] | undefined> = createFuture()
 
-        const target = new DataTarget<TData>({
+        const target = new DataTarget({
             finalized: parent.finalized,
             writer: async (opts: DataWriterOptions<TData>) => {
                 const transformer = await config.transformer({
@@ -464,7 +467,7 @@ export function transformer<TData extends Data, UData extends Data, TFinalized e
             },
         })
 
-        const source = new DataSource<UData>({
+        const source = new DataSource({
             finalized: parent.finalized,
             reader: async (opts) => {
                 offsetFuture.resolve(opts.offset)
@@ -481,6 +484,7 @@ export function transformer<TData extends Data, UData extends Data, TFinalized e
             },
         })
 
+        // FIXME: how to type this?
         return {
             target,
             source,

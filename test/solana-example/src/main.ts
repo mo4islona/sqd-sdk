@@ -61,7 +61,7 @@ async function main() {
         },
     })
 
-    const a = src.pipeThrough(finalizer()).pipeThrough(createProgressTracker('solana'))
+    const a = src.pipeThrough(createProgressTracker('solana'))
 
     await a.pipeTo(
         new DataTarget({
@@ -120,9 +120,10 @@ function createStateTarget<T extends Data<any, any>>(opts: {
     })
 }
 
-function createProgressTracker<T extends Data<any, {number: number}>, TFinalized extends boolean = boolean>(
-    prefix: string,
-): DataDuplexFactory<T, T, TFinalized, TFinalized> {
+function createProgressTracker<
+    T extends Data<{header: {timestamp: number}}, {number: number}>,
+    TFinalized extends boolean = boolean,
+>(prefix: string): DataDuplexFactory<T, T, TFinalized, TFinalized> {
     const logger = createLogger(`sqd:${prefix}`)
 
     return transformer({
@@ -131,11 +132,13 @@ function createProgressTracker<T extends Data<any, {number: number}>, TFinalized
                 offset: opts.offset,
                 transform: async (batch) => {
                     if (batch.data.length > 0) {
-                        const {offset, head, finalizedHead} = batch
+                        const {offset, head, finalizedHead, data} = batch
                         logger.info(
                             [
                                 `progress: ${offset.value.number} / ${head.value.number} (${finalizedHead?.value.number ?? 0})`,
-                                `blocks: ${batch.data.length}`,
+                                `blocks: ${batch.data.length}, lag: ${(
+                                    (Date.now() - data[data.length - 1].value.header.timestamp * 1000) / 1000
+                                ).toFixed(2)}s`,
                             ].join(', '),
                         )
                     }
