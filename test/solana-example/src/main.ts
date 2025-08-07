@@ -26,7 +26,10 @@ async function main() {
         minBytes: 100 * 1024 * 1024,
     })
 
-    let fromBlock = await portal.getHead().then((h) => (h?.number ?? 0) - 100_000)
+    let toBlock = await portal.getHead().then((h) => h?.number ?? 0)
+    let fromBlock = toBlock - 50_000
+
+    console.log(`processing range: [${fromBlock}, ${toBlock ?? null}]`)
 
     const src = solanaPortalDataSource({
         portal,
@@ -45,7 +48,7 @@ async function main() {
             },
             requests: [
                 {
-                    range: {from: fromBlock},
+                    range: {from: fromBlock, to: toBlock},
                     request: {
                         instructions: [
                             {
@@ -74,6 +77,8 @@ async function main() {
             },
         }),
     )
+
+    console.log('end')
 }
 
 interface StateManager<T extends Data<any, any>> {

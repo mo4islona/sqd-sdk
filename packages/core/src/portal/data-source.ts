@@ -57,46 +57,41 @@ export function portalDataSource<T extends Data<any, BlockRef_>>(
         }
         const toBlock = options.query.toBlock
 
-        while (toBlock == null || fromBlock <= toBlock) {
-            const streamQuery = {
-                ...options.query,
-                fromBlock,
-                parentBlockHash,
-                toBlock,
-            }
+        const streamQuery = {
+            ...options.query,
+            fromBlock,
+            parentBlockHash,
+            toBlock,
+        }
 
-            try {
-                for await (const batch of portal.getStream(streamQuery)) {
-                    const portalHead = await headThrottler.get()
-                    if (!portalHead) continue // no data?
+        try {
+            for await (const batch of portal.getStream(streamQuery)) {
+                const portalHead = await headThrottler.get()
+                if (!portalHead) continue // no data?
 
-                    const data = batch.blocks.map((value) => ({
-                        value,
-                        ref: BlockId.fromBlock(value),
-                    })) as T[]
+                const data = batch.blocks.map((value) => ({
+                    value,
+                    ref: BlockId.fromBlock(value),
+                })) as T[]
 
-                    const offset = last(data).ref
-                    const head = calculateHead(new BlockId(portalHead), offset)
-                    const finalizedHead = batch.finalizedHead ? new BlockId(batch.finalizedHead) : undefined
+                const offset = last(data).ref
+                const head = calculateHead(new BlockId(portalHead), offset)
+                const finalizedHead = batch.finalizedHead ? new BlockId(batch.finalizedHead) : undefined
 
-                    yield {
-                        data,
-                        finalizedHead,
-                        head,
-                        offset,
-                    }
-
-                    fromBlock = offset.value.number + 1
-                    parentBlockHash = offset.value.hash
+                yield {
+                    data,
+                    finalizedHead,
+                    head,
+                    offset,
                 }
-            } catch (err) {
-                if (isForkException(err)) {
-                    throw new ForkException<T>({
-                        heads: err.lastBlocks.map((b) => new BlockId(b)),
-                    })
-                }
-                throw err
             }
+        } catch (err) {
+            if (isForkException(err)) {
+                throw new ForkException<T>({
+                    heads: err.lastBlocks.map((b) => new BlockId(b)),
+                })
+            }
+            throw err
         }
     }
 
