@@ -34,7 +34,7 @@ export type SolanaPortalData<Q extends SolanaQueryOptions> = Data<Block<GetField
 
 export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
     options: SolanaPortalDataReaderOptions<Q>
-): DataSource<SolanaPortalData<Q>, false> {
+): DataSource<SolanaPortalData<Q>, true> {
     const fields = getFields(options.query.fields)
     const requests = mergeRangeRequests(options.query.requests, mergeDataRequests)
 
@@ -60,7 +60,7 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
     }
 
     return new DataSource({
-        finalized: false,
+        unfinalized: true,
         reader: async (opts) => {
             const stream = createDataStream(opts.offset)
 

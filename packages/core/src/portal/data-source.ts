@@ -36,7 +36,7 @@ function calculateHead(portalHead: BlockId, lastBlock: BlockId | undefined): Blo
 
 export function portalDataSource<T extends Data<any, BlockRef_>>(
     options: PortalDataSourceOptions
-): DataSource<T, false> {
+): DataSource<T, true> {
     const portal = options.portal instanceof PortalClient ? options.portal : new PortalClient(options.portal)
     const headThrottler = new Throttler(async () => portal.getHead(), 5_000)
 
@@ -88,7 +88,7 @@ export function portalDataSource<T extends Data<any, BlockRef_>>(
     }
 
     return new DataSource({
-        finalized: false,
+        unfinalized: true,
         reader: async (opts) => {
             const stream = createDataStream(opts.offset)
 

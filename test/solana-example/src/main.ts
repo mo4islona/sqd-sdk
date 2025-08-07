@@ -63,20 +63,8 @@ async function main() {
 
     const a = src.pipeThrough(createProgressTracker('solana'))
 
-    const target = new DataTarget({
-        finalized: true,
-        writer: async () => {
-            return {
-                offset: undefined,
-                write: async (batch) => batch.offset,
-                fork: async (fork) => fork.heads[fork.heads.length - 1],
-            }
-        },
-    })
-
     await a.pipeTo(
         new DataTarget({
-            finalized: false,
             writer: async () => {
                 return {
                     offset: undefined,
@@ -100,11 +88,11 @@ function createStateTarget<T extends Data<any, any>>(opts: {
     state: StateManager<T>
     transact: (batch: DataBatch<T>) => Promise<unknown>
     rollback: (block: DataRef<T>) => Promise<unknown>
-}): DataTarget<T, false> {
+}): DataTarget<T, true> {
     const {state, transact, rollback} = opts
 
-    return new DataTarget<T, false>({
-        finalized: false,
+    return new DataTarget<T, true>({
+        unfinalized: true,
         writer: async () => {
             const head = await state.get()
             if (head) {
@@ -136,7 +124,7 @@ function createStateTarget<T extends Data<any, any>>(opts: {
 
 function createProgressTracker<
     T extends Data<{header: {timestamp: number}}, {number: number}>,
-    TFinalized extends boolean = boolean
+    TFinalized extends boolean
 >(prefix: string): DataDuplexFactory<T, T, TFinalized, TFinalized> {
     const logger = createLogger(`sqd:${prefix}`)
 
