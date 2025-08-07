@@ -1,14 +1,6 @@
 import {assert, last} from '../internal/misc'
 import {Throttler} from '../internal/throttler'
-import {
-    type Data,
-    type DataBatch,
-    DataRef,
-    DataSource,
-    ForkException,
-    source,
-    type UnfinalizedDataSource,
-} from '../pipeline'
+import {type Data, type DataBatch, DataRef, DataSource, ForkException, source} from '../pipeline'
 import {
     isForkException,
     PortalClient,
@@ -43,8 +35,8 @@ function calculateHead(portalHead: BlockId, lastBlock: BlockId | undefined): Blo
 }
 
 export function portalDataSource<T extends Data<any, BlockRef_>>(
-    options: PortalDataSourceOptions,
-): UnfinalizedDataSource<T> {
+    options: PortalDataSourceOptions
+): DataSource<T, false> {
     const portal = options.portal instanceof PortalClient ? options.portal : new PortalClient(options.portal)
     const headThrottler = new Throttler(async () => portal.getHead(), 5_000)
 

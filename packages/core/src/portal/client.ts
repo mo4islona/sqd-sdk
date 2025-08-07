@@ -137,19 +137,19 @@ export class PortalClient {
 
     getFinalizedStream<Q extends PortalQuery = PortalQuery, R extends PortalBlock = any>(
         query: Q,
-        options?: PortalStreamOptions,
+        options?: PortalStreamOptions
     ): PortalStream<R> {
         return createPortalStream(query, this.getStreamOptions(options), async (q, o) =>
-            this.getStreamRequest('finalized-stream', q, o),
+            this.getStreamRequest('finalized-stream', q, o)
         )
     }
 
     getStream<Q extends PortalQuery = PortalQuery, R extends PortalBlock = any>(
         query: Q,
-        options?: PortalStreamOptions,
+        options?: PortalStreamOptions
     ): PortalStream<R> {
         return createPortalStream(query, this.getStreamOptions(options), async (q, o) =>
-            this.getStreamRequest('stream', q, o),
+            this.getStreamRequest('stream', q, o)
         )
     }
 
@@ -185,7 +185,7 @@ export class PortalClient {
                 .catch(
                     withErrorContext({
                         query: query,
-                    }),
+                    })
                 )
 
             switch (res.status) {
@@ -231,20 +231,17 @@ function createPortalStream<Q extends PortalQuery = PortalQuery, R extends Porta
     options: Required<PortalStreamOptions>,
     requestStream: (
         query: Q,
-        options?: PortalRequestOptions,
-    ) => Promise<{finalizedHead?: BlockRef; stream?: ReadableStream<string[]> | null | undefined}>,
+        options?: PortalRequestOptions
+    ) => Promise<{finalizedHead?: BlockRef; stream?: ReadableStream<string[]> | null | undefined}>
 ): PortalStream<R> {
     let {headPollInterval, request, ...bufferOptions} = options
-
-    let abortStream = new AbortController()
 
     let buffer = new PortalStreamBuffer<R>(bufferOptions)
 
     let {fromBlock = 0, toBlock, parentBlockHash} = query
-    let abortSignal = abortStream.signal
 
     const ingest = async () => {
-        if (abortSignal.aborted) return
+        if (buffer.signal.aborted) return
         if (toBlock != null && fromBlock > toBlock) return
 
         let res = await requestStream(
@@ -255,8 +252,8 @@ function createPortalStream<Q extends PortalQuery = PortalQuery, R extends Porta
             },
             {
                 ...request,
-                abort: abortSignal,
-            },
+                abort: buffer.signal,
+            }
         )
 
         const finalizedHead = res.finalizedHead
@@ -265,7 +262,7 @@ function createPortalStream<Q extends PortalQuery = PortalQuery, R extends Porta
         if (!('stream' in res)) {
             await buffer.put({blocks: [], bytes: 0, finalizedHead})
             buffer.flush()
-            await wait(headPollInterval, abortSignal)
+            await wait(headPollInterval, buffer.signal)
             return ingest()
         }
 
@@ -295,7 +292,7 @@ function createPortalStream<Q extends PortalQuery = PortalQuery, R extends Porta
 
             buffer.flush()
         } catch (err) {
-            if (abortSignal.aborted || isStreamAbortedError(err)) {
+            if (buffer.signal.aborted || isStreamAbortedError(err)) {
                 // ignore
             } else {
                 throw err
@@ -309,53 +306,57 @@ function createPortalStream<Q extends PortalQuery = PortalQuery, R extends Porta
 
     ingest().then(
         () => buffer.close(),
-        (err) => buffer.fail(err),
+        (err) => buffer.fail(err)
     )
 
     return buffer.iterate()
 }
 
 class PortalStreamBuffer<B> {
-    private _buffer: PortalStreamData<B> | undefined
-    private _state: 'pending' | 'ready' | 'failed' | 'closed' = 'pending'
-    private _error: unknown
+    private buffer: PortalStreamData<B> | undefined
+    private state: 'pending' | 'ready' | 'failed' | 'closed' = 'pending'
+    private error: unknown
 
-    private _readyFuture: Future<void> = createFuture()
-    private _takeFuture: Future<void> = createFuture()
-    private _putFuture: Future<void> = createFuture()
+    private readyFuture: Future<void> = createFuture()
+    private takeFuture: Future<void> = createFuture()
+    private putFuture: Future<void> = createFuture()
 
-    private _idleTimeout: ReturnType<typeof setTimeout> | undefined
-    private _waitTimeout: ReturnType<typeof setTimeout> | undefined
+    private idleTimeout: ReturnType<typeof setTimeout> | undefined
+    private waitTimeout: ReturnType<typeof setTimeout> | undefined
 
-    private _minBytes: number
-    private _maxBytes: number
-    private _maxIdleTime: number
-    private _maxWaitTime: number
+    private minBytes: number
+    private maxBytes: number
+    private maxIdleTime: number
+    private maxWaitTime: number
+
+    private abortController = new AbortController()
+
+    get signal() {
+        return this.abortController.signal
+    }
 
     constructor(options: {maxWaitTime: number; maxBytes: number; maxIdleTime: number; minBytes: number}) {
-        this._maxWaitTime = options.maxWaitTime
-        this._minBytes = options.minBytes
-        this._maxBytes = Math.max(options.maxBytes, options.minBytes)
-        this._maxIdleTime = options.maxIdleTime
+        this.maxWaitTime = options.maxWaitTime
+        this.minBytes = options.minBytes
+        this.maxBytes = Math.max(options.maxBytes, options.minBytes)
+        this.maxIdleTime = options.maxIdleTime
     }
 
     async take(): Promise<PortalStreamData<B> | undefined> {
-        if (this._state === 'failed') {
-            throw this._error
+        if (this.state === 'pending') {
+            this.waitTimeout = setTimeout(() => this._ready(), this.maxWaitTime)
         }
 
-        if (this._state === 'pending') {
-            this._waitTimeout = setTimeout(() => this._ready(), this._maxWaitTime)
+        await Promise.all([this.readyFuture.promise(), this.putFuture.promise()])
+
+        if (this.state === 'failed') {
+            throw this.error
         }
 
-        await Promise.all([this._readyFuture.promise(), this._putFuture.promise()])
+        let result = this.buffer
+        this.buffer = undefined
 
-        let result = this._buffer
-        this._buffer = undefined
-
-        this._takeFuture.resolve()
-
-        if (this._state === 'closed') {
+        if (this.state === 'closed') {
             return result
         }
 
@@ -363,62 +364,64 @@ class PortalStreamBuffer<B> {
             throw new Error('Buffer is empty')
         }
 
-        this._readyFuture = createFuture()
-        this._putFuture = createFuture()
-        this._takeFuture = createFuture()
-        this._state = 'pending'
+        this.takeFuture.resolve()
+
+        this.readyFuture = createFuture()
+        this.putFuture = createFuture()
+        this.takeFuture = createFuture()
+        this.state = 'pending'
 
         return result
     }
 
     async put(data: PortalStreamData<B>) {
-        if (this._state === 'closed' || this._state === 'failed') {
+        if (this.state === 'closed' || this.state === 'failed') {
             throw new Error('Buffer is closed')
         }
 
-        if (this._idleTimeout != null) {
-            clearTimeout(this._idleTimeout)
-            this._idleTimeout = undefined
+        if (this.idleTimeout != null) {
+            clearTimeout(this.idleTimeout)
+            this.idleTimeout = undefined
         }
 
-        if (this._buffer == null) {
-            this._buffer = {blocks: [], bytes: 0}
+        if (this.buffer == null) {
+            this.buffer = {blocks: [], bytes: 0}
         }
 
-        this._buffer.bytes += data.bytes
-        this._buffer.blocks.push(...data.blocks)
-        this._buffer.finalizedHead = data.finalizedHead
+        this.buffer.bytes += data.bytes
+        this.buffer.blocks.push(...data.blocks)
+        this.buffer.finalizedHead = data.finalizedHead
 
-        this._putFuture.resolve()
+        this.putFuture.resolve()
 
-        if (this._buffer.bytes >= this._minBytes) {
-            this._readyFuture.resolve()
+        if (this.buffer.bytes >= this.minBytes) {
+            this.readyFuture.resolve()
         }
 
-        if (this._buffer.bytes >= this._maxBytes) {
-            await this._takeFuture.promise()
+        if (this.buffer.bytes >= this.maxBytes) {
+            await this.takeFuture.promise()
         }
 
-        if (this._state === 'pending') {
-            this._idleTimeout = setTimeout(() => this._ready(), this._maxIdleTime)
+        if (this.state === 'pending') {
+            this.idleTimeout = setTimeout(() => this._ready(), this.maxIdleTime)
         }
     }
 
     flush() {
-        if (this._buffer == null) return
+        if (this.buffer == null) return
         this._ready()
     }
 
     close() {
-        if (this._state === 'closed' || this._state === 'failed') return
-        this._state = 'closed'
+        if (this.state === 'closed' || this.state === 'failed') return
+        this.state = 'closed'
         this._cleanup()
     }
 
     fail(err: any) {
-        if (this._state === 'closed' || this._state === 'failed') return
-        this._state = 'failed'
-        this._error = err
+        if (this.state === 'closed' || this.state === 'failed') return
+        this.state = 'failed'
+        this.error = err
         this._cleanup()
     }
 
@@ -447,32 +450,33 @@ class PortalStreamBuffer<B> {
     }
 
     private _ready() {
-        if (this._state === 'pending') {
-            this._state = 'ready'
-            this._readyFuture.resolve()
+        if (this.state === 'pending') {
+            this.state = 'ready'
+            this.readyFuture.resolve()
         }
-        if (this._idleTimeout != null) {
-            clearTimeout(this._idleTimeout)
-            this._idleTimeout = undefined
+        if (this.idleTimeout != null) {
+            clearTimeout(this.idleTimeout)
+            this.idleTimeout = undefined
         }
-        if (this._waitTimeout != null) {
-            clearTimeout(this._waitTimeout)
-            this._waitTimeout = undefined
+        if (this.waitTimeout != null) {
+            clearTimeout(this.waitTimeout)
+            this.waitTimeout = undefined
         }
     }
 
     private _cleanup() {
-        if (this._idleTimeout != null) {
-            clearTimeout(this._idleTimeout)
-            this._idleTimeout = undefined
+        if (this.idleTimeout != null) {
+            clearTimeout(this.idleTimeout)
+            this.idleTimeout = undefined
         }
-        if (this._waitTimeout != null) {
-            clearTimeout(this._waitTimeout)
-            this._waitTimeout = undefined
+        if (this.waitTimeout != null) {
+            clearTimeout(this.waitTimeout)
+            this.waitTimeout = undefined
         }
-        this._readyFuture.resolve()
-        this._putFuture.resolve()
-        this._takeFuture.resolve()
+        this.readyFuture.resolve()
+        this.putFuture.resolve()
+        this.takeFuture.resolve()
+        this.abortController.abort()
     }
 }
 
@@ -516,13 +520,12 @@ class LineSplitStream implements ReadableWritablePair<string[], string> {
 export class ForkException extends Error {
     readonly name = 'ForkError'
 
-    constructor(
-        readonly lastBlocks: BlockRef[],
-        readonly head: BlockRef,
-    ) {
+    constructor(readonly lastBlocks: BlockRef[], readonly head: BlockRef) {
         let parent = last(lastBlocks)
         super(
-            `expected ${head.number + 1} to have parent ${parent.number}#${parent.hash}, but got ${head.number}#${head.hash}`,
+            `expected ${head.number + 1} to have parent ${parent.number}#${parent.hash}, but got ${head.number}#${
+                head.hash
+            }`
         )
     }
 }

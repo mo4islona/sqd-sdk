@@ -3,16 +3,13 @@ import {createLogger} from '@sqd-sdk/core/logger'
 import {
     type Data,
     type DataBatch,
-    type UnfinalizedDataTarget,
     type DataRef,
     DataTarget,
     transformer,
-    type UnfinalizedDataSource,
     type DataDuplexFactory,
     finalizer,
-    type FinalizedDataTarget,
-    type FinalizedDataSource,
     type DataDuplex,
+    DataSource,
 } from '@sqd-sdk/core/pipeline'
 import {PortalClient} from '@sqd-sdk/core/portal'
 import {type SolanaPortalData, solanaPortalDataSource} from '@sqd-sdk/solana-stream'
@@ -66,8 +63,20 @@ async function main() {
 
     const a = src.pipeThrough(createProgressTracker('solana'))
 
+    const target = new DataTarget({
+        finalized: true,
+        writer: async () => {
+            return {
+                offset: undefined,
+                write: async (batch) => batch.offset,
+                fork: async (fork) => fork.heads[fork.heads.length - 1],
+            }
+        },
+    })
+
     await a.pipeTo(
         new DataTarget({
+            finalized: false,
             writer: async () => {
                 return {
                     offset: undefined,
@@ -75,7 +84,7 @@ async function main() {
                     fork: async (fork) => fork.heads[fork.heads.length - 1],
                 }
             },
-        }),
+        })
     )
 
     console.log('end')
@@ -91,10 +100,10 @@ function createStateTarget<T extends Data<any, any>>(opts: {
     state: StateManager<T>
     transact: (batch: DataBatch<T>) => Promise<unknown>
     rollback: (block: DataRef<T>) => Promise<unknown>
-}): UnfinalizedDataTarget<T> {
+}): DataTarget<T, false> {
     const {state, transact, rollback} = opts
 
-    return new DataTarget<T>({
+    return new DataTarget<T, false>({
         finalized: false,
         writer: async () => {
             const head = await state.get()
@@ -127,7 +136,7 @@ function createStateTarget<T extends Data<any, any>>(opts: {
 
 function createProgressTracker<
     T extends Data<{header: {timestamp: number}}, {number: number}>,
-    TFinalized extends boolean = boolean,
+    TFinalized extends boolean = boolean
 >(prefix: string): DataDuplexFactory<T, T, TFinalized, TFinalized> {
     const logger = createLogger(`sqd:${prefix}`)
 
@@ -140,11 +149,14 @@ function createProgressTracker<
                         const {offset, head, finalizedHead, data} = batch
                         logger.info(
                             [
-                                `progress: ${offset.value.number} / ${head.value.number} (${finalizedHead?.value.number ?? 0})`,
+                                `progress: ${offset.value.number} / ${head.value.number} (${
+                                    finalizedHead?.value.number ?? 0
+                                })`,
                                 `blocks: ${batch.data.length}, lag: ${(
-                                    (Date.now() - data[data.length - 1].value.header.timestamp * 1000) / 1000
+                                    (Date.now() - data[data.length - 1].value.header.timestamp * 1000) /
+                                    1000
                                 ).toFixed(2)}s`,
-                            ].join(', '),
+                            ].join(', ')
                         )
                     }
                     return batch

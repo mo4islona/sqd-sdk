@@ -1,13 +1,5 @@
 import {applyRangeBound, mergeRangeRequests} from '@sqd-sdk/core/internal/range/index'
-import {
-    type DataBatch,
-    DataRef,
-    type UnfinalizedDataSource,
-    ForkException,
-    type Data,
-    DataSource,
-    source,
-} from '@sqd-sdk/core/pipeline'
+import {type DataBatch, type Data, DataSource} from '@sqd-sdk/core/pipeline'
 import {cast} from '@sqd-sdk/core/validation'
 import {
     type Block,
@@ -41,8 +33,8 @@ export interface SolanaPortalDataReaderOptions<Q extends SolanaQueryOptions> {
 export type SolanaPortalData<Q extends SolanaQueryOptions> = Data<Block<GetFields<Q['fields']>>, BlockRef>
 
 export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
-    options: SolanaPortalDataReaderOptions<Q>,
-): UnfinalizedDataSource<SolanaPortalData<Q>> {
+    options: SolanaPortalDataReaderOptions<Q>
+): DataSource<SolanaPortalData<Q>, false> {
     const fields = getFields(options.query.fields)
     const requests = mergeRangeRequests(options.query.requests, mergeDataRequests)
 
@@ -67,7 +59,7 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
         }
     }
 
-    return source({
+    return new DataSource({
         finalized: false,
         reader: async (opts) => {
             const stream = createDataStream(opts.offset)
@@ -85,7 +77,7 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
 
 export function mapBlock<F extends RequiredFieldSelection>(
     rawBlock: unknown,
-    fields: RequiredFieldSelection,
+    fields: RequiredFieldSelection
 ): Block<F> {
     const validator = getDataSchema(fields)
     const partial = cast(validator, rawBlock) as BlockPartial<F>
