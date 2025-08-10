@@ -28,7 +28,7 @@ async function main() {
 
     console.log(`processing range: [${fromBlock}, ${toBlock ?? null}]`)
 
-    const src = solanaPortalDataSource({
+    await solanaPortalDataSource({
         portal,
         query: {
             fields: {
@@ -60,20 +60,20 @@ async function main() {
             ],
         },
     })
-
-    const a = src.pipeThrough(createProgressTracker('solana'))
-
-    await a.pipeTo(
-        new DataTarget({
-            writer: async () => {
-                return {
-                    offset: undefined,
-                    write: async (batch) => batch.offset,
-                    fork: async (fork) => fork.heads[fork.heads.length - 1],
-                }
-            },
-        })
-    )
+        .pipeThrough(createProgressTracker('solana'))
+        .pipeThrough(finalizer())
+        .pipeTo(
+            new DataTarget({
+                unfinalized: true,
+                writer: async () => {
+                    return {
+                        offset: undefined,
+                        write: async (batch) => batch.offset,
+                        fork: async (fork) => fork.heads[fork.heads.length - 1],
+                    }
+                },
+            })
+        )
 
     console.log('end')
 }
@@ -91,7 +91,7 @@ function createStateTarget<T extends Data<any, any>>(opts: {
 }): DataTarget<T, true> {
     const {state, transact, rollback} = opts
 
-    return new DataTarget<T, true>({
+    return new DataTarget({
         unfinalized: true,
         writer: async () => {
             const head = await state.get()

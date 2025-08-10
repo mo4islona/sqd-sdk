@@ -98,18 +98,26 @@ export interface DataSourceConfig<T extends Data, TUnfinalized extends boolean =
     unfinalized?: TUnfinalized
 }
 
-// NOTE: workaround to allow constructor overloading
-export class DataSource<TData extends Data, TUnfinalized extends boolean> {
+export const DataSource: {
+    new <TData extends Data, TUnfinalized extends boolean>(config: DataSourceConfig<TData, TUnfinalized>): DataSource<
+        TData,
+        TUnfinalized
+    >
+} = class<TData extends Data, TUnfinalized extends boolean> implements DataSource<TData, TUnfinalized> {
+    readonly unfinalized: TUnfinalized
+
     private _state: 'opened' | 'locked' | 'closed' = 'opened'
     private _abortController: AbortController | undefined
     private _reader: (opts: DataReaderOptions<TData>) => PromiseLike<DataReader<TData>>
     private _closePromise: Promise<void> | undefined
 
     constructor(config: DataSourceConfig<TData, TUnfinalized>) {
-        Object.defineProperty(this, 'unfinalized', {
-            value: config.unfinalized !== false,
-            writable: false,
-        })
+        // NOTE: satisfy compiler
+        if (config.unfinalized == null) {
+            this.unfinalized = true as TUnfinalized
+        } else {
+            this.unfinalized = config.unfinalized
+        }
         this._reader = config.reader
     }
 
@@ -255,7 +263,14 @@ function validateBatch<TData extends Data>(offset: TData['ref'] | undefined, bat
 }
 
 // NOTE: workaround to allow constructor overloading
-export class DataTarget<TData extends Data, TUnfinalized extends boolean> {
+export const DataTarget: {
+    new <TData extends Data, TUnfinalized extends boolean>(config: DataTargetConfig<TData, TUnfinalized>): DataTarget<
+        TData,
+        TUnfinalized
+    >
+} = class<TData extends Data, TUnfinalized extends boolean> implements DataTarget<TData, TUnfinalized> {
+    readonly unfinalized: TUnfinalized
+
     private _state: 'opened' | 'locked' | 'closed' = 'opened'
     private _abortController: AbortController | undefined
     private _writer: (
@@ -264,10 +279,12 @@ export class DataTarget<TData extends Data, TUnfinalized extends boolean> {
     private _closePromise: Promise<void> | undefined
 
     constructor(config: DataTargetConfig<TData, TUnfinalized>) {
-        Object.defineProperty(this, 'unfinalized', {
-            value: config.unfinalized !== false,
-            writable: false,
-        })
+        // NOTE: satisfy compiler
+        if (config.unfinalized == null) {
+            this.unfinalized = true as TUnfinalized
+        } else {
+            this.unfinalized = config.unfinalized
+        }
         this._writer = config.writer
     }
 
