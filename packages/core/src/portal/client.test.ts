@@ -43,7 +43,7 @@ async function main() {
         ],
         fromBlock,
         toBlock: fromBlock,
-    } as const satisfies Solana.FinalizedQuery
+    } as const satisfies Solana.Query
 
     for await (let {blocks, finalizedHead} of portal.getStream(query, {})) {
         console.log(blocks[0])

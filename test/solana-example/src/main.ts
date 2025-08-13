@@ -7,11 +7,10 @@ import {
     DataTarget,
     transformer,
     type DataDuplexFactory,
-    finalizer,
     type DataDuplex,
     DataSource,
 } from '@sqd-sdk/core/pipeline'
-import {PortalClient} from '@sqd-sdk/core/portal'
+import {BlockId, PortalClient} from '@sqd-sdk/core/portal'
 import {type SolanaPortalData, solanaPortalDataSource} from '@sqd-sdk/solana-stream'
 
 async function main() {
@@ -61,27 +60,30 @@ async function main() {
         },
     })
         .pipeThrough(createProgressTracker('solana'))
-        .pipeThrough(finalizer())
         .pipeTo(
             new DataTarget({
                 unfinalized: true,
-                writer: async () => {
+                writer: async (opts) => {
                     return {
                         offset: undefined,
-                        write: async (batch) => batch.offset,
-                        fork: async (fork) => fork.heads[fork.heads.length - 1],
+                        next: async (batch) => {
+                            return {done: false, value: batch.offset}
+                        },
+                        fork: async (fork) => {
+                            return {done: false, value: fork.heads[fork.heads.length - 1]}
+                        },
                     }
                 },
-            })
+            }),
         )
 
     console.log('end')
 }
 
 interface StateManager<T extends Data<any, any>> {
-    get(): Promise<T['ref'] | undefined>
-    set(ref: T['ref']): Promise<void>
-    fork(refs: T['ref'][]): Promise<T['ref'] | undefined>
+    get(): Promise<T['id'] | undefined>
+    set(ref: T['id']): Promise<void>
+    fork(refs: T['id'][]): Promise<T['id'] | undefined>
 }
 
 function createStateTarget<T extends Data<any, any>>(opts: {
@@ -101,21 +103,21 @@ function createStateTarget<T extends Data<any, any>>(opts: {
 
             return {
                 offset: head,
-                write: async (batch) => {
+                next: async (batch) => {
                     await transact(batch)
 
                     if (batch.data.length > 0) {
-                        await state.set(batch.data[batch.data.length - 1].ref)
+                        await state.set(batch.data[batch.data.length - 1].id)
                     }
 
-                    return batch.offset
+                    return {done: false, value: batch.offset}
                 },
                 fork: async (fork) => {
                     const newHead = await state.fork(fork.heads)
                     if (newHead) {
                         await rollback(newHead)
                     }
-                    return newHead
+                    return {done: false, value: newHead}
                 },
             }
         },
@@ -124,7 +126,7 @@ function createStateTarget<T extends Data<any, any>>(opts: {
 
 function createProgressTracker<
     T extends Data<{header: {timestamp: number}}, {number: number}>,
-    TFinalized extends boolean
+    TFinalized extends boolean,
 >(prefix: string): DataDuplexFactory<T, T, TFinalized, TFinalized> {
     const logger = createLogger(`sqd:${prefix}`)
 
@@ -132,19 +134,17 @@ function createProgressTracker<
         transformer: async (opts) => {
             return {
                 offset: opts.offset,
+                ref: BlockId,
                 transform: async (batch) => {
                     if (batch.data.length > 0) {
                         const {offset, head, finalizedHead, data} = batch
                         logger.info(
                             [
-                                `progress: ${offset.value.number} / ${head.value.number} (${
-                                    finalizedHead?.value.number ?? 0
-                                })`,
+                                `progress: ${offset.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
                                 `blocks: ${batch.data.length}, lag: ${(
-                                    (Date.now() - data[data.length - 1].value.header.timestamp * 1000) /
-                                    1000
+                                    (Date.now() - data[data.length - 1].value.header.timestamp * 1000) / 1000
                                 ).toFixed(2)}s`,
-                            ].join(', ')
+                            ].join(', '),
                         )
                     }
                     return batch

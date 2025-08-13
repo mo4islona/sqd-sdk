@@ -169,10 +169,14 @@ export class SyncQueue<T> {
         resolve: (value: T | undefined) => void
     }> = []
 
-    private closed = false
+    #isClosed = false
+
+    get isClosed(): boolean {
+        return this.#isClosed
+    }
 
     async put(value: T): Promise<void> {
-        if (this.closed) {
+        if (this.isClosed) {
             throw new ClosedQueueError()
         }
 
@@ -183,7 +187,7 @@ export class SyncQueue<T> {
         }
 
         return new Promise<void>((resolve, reject) => {
-            if (this.closed) {
+            if (this.isClosed) {
                 reject(new ClosedQueueError())
                 return
             }
@@ -198,12 +202,12 @@ export class SyncQueue<T> {
             return pendingPut.value
         }
 
-        if (this.closed) {
+        if (this.isClosed) {
             return undefined
         }
 
         return new Promise<T | undefined>((resolve) => {
-            if (this.closed) {
+            if (this.isClosed) {
                 resolve(undefined)
                 return
             }
@@ -212,8 +216,8 @@ export class SyncQueue<T> {
     }
 
     close(): void {
-        if (this.closed) return
-        this.closed = true
+        if (this.isClosed) return
+        this.#isClosed = true
 
         // Reject all pending puts
         for (const pendingPut of this.pendingPuts) {

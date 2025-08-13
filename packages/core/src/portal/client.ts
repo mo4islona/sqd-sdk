@@ -1,7 +1,17 @@
-import {type HttpResponse, type BaseHttpClient, HttpError} from '../http-client'
-import {addErrorContext, last, unexpectedCase, wait, withAbort, withErrorContext} from '../internal/misc'
+import {
+    type HttpResponse,
+    HttpError,
+    HttpClient,
+    type HttpClientOptions,
+    type RequestOptions,
+    type HttpBody,
+} from '../http-client'
+import {addErrorContext, last, unexpectedCase, wait, withErrorContext} from '../internal/misc'
 import {createFuture, type Future} from '../internal/async'
-import {Throttler} from '../internal/throttler'
+import type {evm, PortalBlock, PortalQuery, solana, substrate} from './query'
+import type {Simplify} from './query/common'
+
+const USER_AGENT = '@subsquid/portal-client (https://sqd.ai)'
 
 export interface PortalClientOptions {
     /**
@@ -12,7 +22,7 @@ export interface PortalClientOptions {
     /**
      * Optional custom HTTP client to use.
      */
-    http: BaseHttpClient
+    http?: HttpClient | HttpClientOptions
 
     /**
      * Minimum number of bytes to return.
@@ -65,37 +75,36 @@ export interface PortalStreamOptions {
     headPollInterval?: number
 }
 
-export type BlockRef = {
-    readonly hash?: string
-    readonly number: number
-}
-
 export type PortalStreamData<B> = {
     blocks: B[]
     finalizedHead?: BlockRef
-    bytes: number
+    meta: {
+        bytes: number
+    }
 }
 
 export interface PortalStream<B> extends AsyncIterable<PortalStreamData<B>> {}
 
-export type PortalQuery = {
-    type: string
-    fromBlock?: number
-    toBlock?: number
-    parentBlockHash?: string
-    [key: string]: unknown
+export type GetBlock<Q extends evm.Query | solana.Query | substrate.Query> = Q['type'] extends 'evm'
+    ? evm.Block<Q['fields']>
+    : Q['type'] extends 'solana'
+      ? solana.Block<Q['fields']>
+      : Q['type'] extends 'substrate'
+        ? substrate.Block<Q['fields']>
+        : PortalBlock
+
+export type BlockRef = {
+    hash: string
+    number: number
 }
 
-export type PortalBlock = {
-    header: {
-        number: number
-        hash?: string
-    }
+export function createQuery<Q extends evm.Query | solana.Query | substrate.Query>(query: Q): Simplify<Q & PortalQuery> {
+    return query
 }
 
 export class PortalClient {
     private url: URL
-    private client: BaseHttpClient
+    private client: HttpClient
     private headPollInterval: number
     private minBytes: number
     private maxBytes: number
@@ -104,7 +113,7 @@ export class PortalClient {
 
     constructor(options: PortalClientOptions) {
         this.url = new URL(options.url)
-        this.client = options.http
+        this.client = options.http instanceof HttpClient ? options.http : new HttpClient(options.http)
         this.headPollInterval = options.headPollInterval ?? 0
         this.minBytes = options.minBytes ?? 10 * 1024 * 1024
         this.maxBytes = options.maxBytes ?? this.minBytes
@@ -123,33 +132,36 @@ export class PortalClient {
     }
 
     async getHead(options?: PortalRequestOptions): Promise<BlockRef | undefined> {
-        const res = await this.client.request<BlockRef>(this.getDatasetUrl('head'), {...options, method: 'GET'})
-        return res.body ?? undefined
-    }
-
-    async getFinalizedHead(options?: PortalRequestOptions): Promise<BlockRef | undefined> {
-        const res = await this.client.request<BlockRef>(this.getDatasetUrl('finalized-head'), {
+        const res = await this.request(this.getDatasetUrl('head'), {
             ...options,
             method: 'GET',
         })
         return res.body ?? undefined
     }
 
-    getFinalizedStream<Q extends PortalQuery = PortalQuery, R extends PortalBlock = any>(
+    async getFinalizedHead(options?: PortalRequestOptions): Promise<BlockRef | undefined> {
+        const res = await this.request(this.getDatasetUrl('finalized-head'), {
+            ...options,
+            method: 'GET',
+        })
+        return res.body ?? undefined
+    }
+
+    getFinalizedStream<Q extends evm.Query | solana.Query | substrate.Query, R extends GetBlock<Q> = GetBlock<Q>>(
         query: Q,
-        options?: PortalStreamOptions
+        options?: PortalStreamOptions,
     ): PortalStream<R> {
         return createPortalStream(query, this.getStreamOptions(options), async (q, o) =>
-            this.getStreamRequest('finalized-stream', q, o)
+            this.getStreamRequest('finalized-stream', q, o),
         )
     }
 
-    getStream<Q extends PortalQuery = PortalQuery, R extends PortalBlock = any>(
+    getStream<Q extends evm.Query | solana.Query | substrate.Query, R extends GetBlock<Q> = GetBlock<Q>>(
         query: Q,
-        options?: PortalStreamOptions
+        options?: PortalStreamOptions,
     ): PortalStream<R> {
         return createPortalStream(query, this.getStreamOptions(options), async (q, o) =>
-            this.getStreamRequest('stream', q, o)
+            this.getStreamRequest('stream', q, o),
         )
     }
 
@@ -175,32 +187,32 @@ export class PortalClient {
 
     private async getStreamRequest(path: string, query: PortalQuery, options?: PortalRequestOptions) {
         try {
-            let res = await this.client
-                .request<ReadableStream | undefined>(this.getDatasetUrl(path), {
-                    ...options,
-                    method: 'POST',
-                    json: query,
-                    stream: true,
-                })
-                .catch(
-                    withErrorContext({
-                        query: query,
-                    })
-                )
+            let res = await this.request<ReadableStream | undefined>(this.getDatasetUrl(path), {
+                ...options,
+                method: 'POST',
+                json: query,
+                stream: true,
+            }).catch(
+                withErrorContext({
+                    query: query,
+                }),
+            )
 
             switch (res.status) {
                 case 200: {
+                    let finalizedHead = getFinalizedHeadHeader(res.headers)
+                    let stream = res.body ? splitLines(res.body) : undefined
+
                     return {
-                        finalizedHead: getFinalizedHeadHeader(res.headers),
-                        stream: res.body
-                            ?.pipeThrough(new TextDecoderStream('utf8'))
-                            ?.pipeThrough(new LineSplitStream('\n')),
+                        finalizedHead,
+                        stream,
                     }
                 }
-                case 204:
+                case 204: {
                     return {
                         finalizedHead: getFinalizedHeadHeader(res.headers),
                     }
+                }
                 default:
                     throw unexpectedCase(res.status)
             }
@@ -217,6 +229,16 @@ export class PortalClient {
             })
         }
     }
+
+    private request<T = any>(url: string, options: RequestOptions & HttpBody = {}) {
+        return this.client.request<T>(url, {
+            ...options,
+            headers: {
+                'User-Agent': USER_AGENT,
+                ...options.headers,
+            },
+        })
+    }
 }
 
 function isForkHttpError(err: unknown): err is HttpError {
@@ -231,8 +253,8 @@ function createPortalStream<Q extends PortalQuery = PortalQuery, R extends Porta
     options: Required<PortalStreamOptions>,
     requestStream: (
         query: Q,
-        options?: PortalRequestOptions
-    ) => Promise<{finalizedHead?: BlockRef; stream?: ReadableStream<string[]> | null | undefined}>
+        options?: PortalRequestOptions,
+    ) => Promise<{finalizedHead?: BlockRef; stream?: AsyncIterable<string[]> | null | undefined}>,
 ): PortalStream<R> {
     let {headPollInterval, request, ...bufferOptions} = options
 
@@ -253,26 +275,28 @@ function createPortalStream<Q extends PortalQuery = PortalQuery, R extends Porta
             {
                 ...request,
                 abort: buffer.signal,
-            }
+            },
         )
 
         const finalizedHead = res.finalizedHead
 
         // we are on head
         if (!('stream' in res)) {
-            await buffer.put({blocks: [], bytes: 0, finalizedHead})
+            await buffer.put({blocks: [], meta: {bytes: 0}, finalizedHead})
             buffer.flush()
-            await wait(headPollInterval, buffer.signal)
+            if (headPollInterval > 0) {
+                await wait(headPollInterval, buffer.signal)
+            }
             return ingest()
         }
 
         // no data left on this range
         if (res.stream == null) return
 
-        let reader = res.stream.getReader()
+        let iterator = res.stream[Symbol.asyncIterator]()
         try {
             while (true) {
-                let data = await reader.read()
+                let data = await iterator.next()
                 if (data.done) break
 
                 let blocks: R[] = []
@@ -287,7 +311,7 @@ function createPortalStream<Q extends PortalQuery = PortalQuery, R extends Porta
                     parentBlockHash = block.header.hash
                 }
 
-                await buffer.put({blocks, bytes, finalizedHead})
+                await buffer.put({blocks, finalizedHead, meta: {bytes}})
             }
 
             buffer.flush()
@@ -298,7 +322,7 @@ function createPortalStream<Q extends PortalQuery = PortalQuery, R extends Porta
                 throw err
             }
         } finally {
-            await reader?.cancel().catch(() => {})
+            await iterator?.return?.().catch(() => {})
         }
 
         return ingest()
@@ -306,7 +330,7 @@ function createPortalStream<Q extends PortalQuery = PortalQuery, R extends Porta
 
     ingest().then(
         () => buffer.close(),
-        (err) => buffer.fail(err)
+        (err) => buffer.fail(err),
     )
 
     return buffer.iterate()
@@ -385,20 +409,20 @@ class PortalStreamBuffer<B> {
         }
 
         if (this.buffer == null) {
-            this.buffer = {blocks: [], bytes: 0}
+            this.buffer = {blocks: [], meta: {bytes: 0}}
         }
 
-        this.buffer.bytes += data.bytes
         this.buffer.blocks.push(...data.blocks)
         this.buffer.finalizedHead = data.finalizedHead
+        this.buffer.meta.bytes += data.meta.bytes
 
         this.putFuture.resolve()
 
-        if (this.buffer.bytes >= this.minBytes) {
+        if (this.buffer.meta.bytes >= this.minBytes) {
             this.readyFuture.resolve()
         }
 
-        if (this.buffer.bytes >= this.maxBytes) {
+        if (this.buffer.meta.bytes >= this.maxBytes) {
             await this.takeFuture.promise()
         }
 
@@ -480,52 +504,57 @@ class PortalStreamBuffer<B> {
     }
 }
 
-class LineSplitStream implements ReadableWritablePair<string[], string> {
+async function* splitLines(chunks: AsyncIterable<Uint8Array>) {
+    let splitter = new LineSplitter()
+    for await (let chunk of chunks) {
+        let lines = splitter.push(chunk)
+        if (lines) yield lines
+    }
+    let lastLine = splitter.end()
+    if (lastLine) yield [lastLine]
+}
+
+class LineSplitter {
+    private decoder = new TextDecoder('utf8')
     private line = ''
-    private transform: TransformStream<string, string[]>
 
-    get readable() {
-        return this.transform.readable
-    }
-    get writable() {
-        return this.transform.writable
+    push(data: Uint8Array): string[] | undefined {
+        let s = this.decoder.decode(data)
+        if (!s) return
+        let lines = s.split('\n')
+        if (lines.length === 1) {
+            this.line += lines[0]
+        } else {
+            let result: string[] = []
+            lines[0] = this.line + lines[0]
+            this.line = last(lines)
+            for (let i = 0; i < lines.length - 1; i++) {
+                let line = lines[i]
+                if (line) {
+                    result.push(line)
+                }
+            }
+            if (result.length > 0) return result
+        }
     }
 
-    constructor(separator: string) {
-        this.transform = new TransformStream({
-            transform: (chunk, controller) => {
-                let lines = chunk.split(separator)
-                if (lines.length === 1) {
-                    this.line += lines[0]
-                } else {
-                    let result: string[] = []
-                    lines[0] = this.line + lines[0]
-                    this.line = lines.pop() || ''
-                    result.push(...lines)
-                    controller.enqueue(result)
-                }
-            },
-            flush: (controller) => {
-                if (this.line) {
-                    controller.enqueue([this.line])
-                    this.line = ''
-                }
-                // NOTE: not needed according to the spec, but done the same way in nodejs sources
-                controller.terminate()
-            },
-        })
+    end(): string | undefined {
+        if (this.line) return this.line
     }
 }
 
 export class ForkException extends Error {
     readonly name = 'ForkError'
 
-    constructor(readonly lastBlocks: BlockRef[], readonly head: BlockRef) {
+    constructor(
+        readonly lastBlocks: BlockRef[],
+        readonly head: BlockRef,
+    ) {
         let parent = last(lastBlocks)
         super(
             `expected ${head.number + 1} to have parent ${parent.number}#${parent.hash}, but got ${head.number}#${
                 head.hash
-            }`
+            }`,
         )
     }
 }

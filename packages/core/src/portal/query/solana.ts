@@ -1,5 +1,4 @@
-import type {Select, Selector, Trues} from '../../internal/selection'
-import type {Base58, Base64, Simplify} from '../../internal/types'
+import type {Select, Selector, Trues, Base58, Base64, Simplify, PortalBlock, PortalQuery} from './common'
 
 export type BlockHeaderFields = {
     hash: Base58
@@ -132,7 +131,7 @@ export type RewardFields = {
     commission?: number
 }
 
-export type BlockHeaderFieldSelection = Selector<keyof BlockHeaderFields>
+export type BlockHeaderFieldSelection = Simplify<Selector<keyof BlockHeaderFields> & {number: true; hash: true}>
 export type BlockHeader<F extends BlockHeaderFieldSelection = Trues<BlockHeaderFieldSelection>> = Select<
     BlockHeaderFields,
     F
@@ -259,16 +258,14 @@ export type RewardRequest = {
     pubkey?: Base58[]
 }
 
-export type FinalizedQuery = Simplify<
-    {
+export type Query = Simplify<
+    PortalQuery & {
         type: 'solana'
-        fromBlock?: number
-        toBlock?: number
         fields: FieldSelection
     } & DataRequest
 >
 
-export type BlockData<F extends FieldSelection> = {
+export type Block<F extends FieldSelection> = Simplify<{
     header: BlockHeader<F['block'] & {}>
     transactions?: Transaction<F['transaction'] & {}>[]
     instructions?: Instruction<F['instruction'] & {}>[]
@@ -276,6 +273,4 @@ export type BlockData<F extends FieldSelection> = {
     balances?: Balance<F['balance'] & {}>[]
     tokenBalances?: TokenBalance<F['tokenBalance'] & {}>[]
     rewards?: Reward<F['reward'] & {}>[]
-}
-
-export type Response<Q extends FinalizedQuery> = BlockData<Q['fields']>
+}>

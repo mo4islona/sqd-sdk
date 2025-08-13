@@ -1,5 +1,4 @@
-import type {Select, Selector, Trues} from '../../internal/selection'
-import type {Hex, ConditionalOmit, Simplify} from '../../internal/types'
+import type {Select, Selector, Trues, Hex, ConditionalOmit, Simplify, PortalBlock, PortalQuery} from './common'
 
 type AddPrefix<Prefix extends string, S> = S extends string ? `${Prefix}${Capitalize<S>}` : never
 
@@ -176,7 +175,7 @@ export type StateDiffDeleteFields = StateDiffBaseFields & {
     next?: null
 }
 
-export type BlockHeaderFieldSelection = Selector<keyof BlockHeaderFields>
+export type BlockHeaderFieldSelection = Simplify<Selector<keyof BlockHeaderFields> & {number: true; hash: true}>
 export type BlockHeader<T extends BlockHeaderFieldSelection = Trues<BlockHeaderFieldSelection>> = Select<
     BlockHeaderFields,
     T
@@ -352,21 +351,17 @@ export type DataRequest = {
     includeAllBlocks?: boolean
 }
 
-export type FinalizedQuery = Simplify<
-    {
+export type Query = Simplify<
+    PortalQuery & {
         type: 'evm'
-        fromBlock?: number
-        toBlock?: number
         fields: FieldSelection
     } & DataRequest
 >
 
-export type BlockData<F extends FieldSelection> = {
+export type Block<F extends FieldSelection> = Simplify<{
     header: BlockHeader<F['block'] & {}>
     logs?: Log<F['log'] & {}>[]
     transactions?: Transaction<F['transaction'] & {}>[]
     traces?: Trace<F['trace'] & {}>[]
     stateDiffs?: StateDiff<F['stateDiff'] & {}>[]
-}
-
-export type Response<Q extends FinalizedQuery> = BlockData<Q['fields']>
+}>

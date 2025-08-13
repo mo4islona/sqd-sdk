@@ -1,6 +1,8 @@
-import type {Select, Selector, Trues} from '../../internal/selection'
-import type {Hex, Simplify} from '../../internal/types'
+import type {Select, Selector, Trues, Hex, Simplify, PortalBlock, PortalQuery} from './common'
 
+/**
+ * @example 'Balances.Transfer'
+ */
 export type QualifiedName = string & {}
 
 export type BlockHeaderFields = {
@@ -104,7 +106,7 @@ export type EventFields = {
     _gearProgramId?: Hex
 }
 
-export type BlockHeaderFieldSelection = Selector<keyof BlockHeaderFields>
+export type BlockHeaderFieldSelection = Simplify<Selector<keyof BlockHeaderFields> & {number: true; hash: true}>
 export type BlockHeader<T extends BlockHeaderFieldSelection = Trues<BlockHeaderFieldSelection>> = Select<
     BlockHeaderFields,
     T
@@ -177,20 +179,16 @@ export type DataRequest = {
     gearUserMessagesSent?: GearUserMessageSentRequest[]
 }
 
-export type FinalizedQuery = Simplify<
-    {
+export type Query = Simplify<
+    PortalQuery & {
         type: 'substrate'
-        fromBlock?: number
-        toBlock?: number
         fields: FieldSelection
     } & DataRequest
 >
 
-export type BlockData<F extends FieldSelection> = Simplify<{
+export type Block<F extends FieldSelection> = Simplify<{
     header: BlockHeader<F['block'] & {}>
     events?: Event<F['event'] & {}>[]
     calls?: Call<F['call'] & {}>[]
     extrinsics?: Extrinsic<F['extrinsic'] & {}>[]
 }>
-
-export type Response<Q extends FinalizedQuery> = BlockData<Q['fields']>

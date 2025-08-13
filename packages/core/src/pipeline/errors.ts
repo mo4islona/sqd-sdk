@@ -1,10 +1,10 @@
 import {assert} from '../internal/misc'
 import type {Data, DataFork} from './data'
 
-export class ForkException<D extends Data> extends Error {
+export class ForkException<TId> extends Error {
     readonly isSqdForkException = true
 
-    constructor(readonly fork: DataFork<D>) {
+    constructor(readonly fork: DataFork<TId>) {
         assert(fork.heads.length > 0)
         const lastRef = fork.heads[fork.heads.length - 1]
         super(`Fork exception at ${lastRef}`)
@@ -15,5 +15,5 @@ export class ForkException<D extends Data> extends Error {
     }
 }
 
-export const isForkException = <D extends Data>(err: unknown): err is ForkException<D> =>
-    err instanceof Error && !!(err as Partial<ForkException<D>>).isSqdForkException
+export const isForkException = <TId>(err: unknown): err is ForkException<TId> =>
+    err instanceof Error && !!(err as Partial<ForkException<TId>>).isSqdForkException

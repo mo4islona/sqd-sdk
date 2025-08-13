@@ -5,7 +5,7 @@ import type {Hex} from '@sqd-sdk/core/internal/types/primitive'
 
 export type FieldSelection = Solana.FieldSelection
 
-export type BlockPartial<F extends FieldSelection = Trues<FieldSelection>> = Solana.BlockData<F>
+export type BlockPartial<F extends FieldSelection = Trues<FieldSelection>> = Solana.Block<F>
 
 export type Block<F extends FieldSelection = Trues<FieldSelection>> = {
     header: BlockHeader<F>
