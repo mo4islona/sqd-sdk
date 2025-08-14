@@ -52,7 +52,7 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
                     ...request.request,
                 },
             }).read({offset})) {
-                yield data
+                yield data as DataBatch<SolanaPortalData<Q>>
             }
 
             return

@@ -2,11 +2,10 @@ import {createLogger, type Logger} from '../logger'
 import {addErrorContext, ensureError, wait} from '../internal/misc'
 import type {HttpBody} from './body'
 import {addStreamTimeout} from '../internal/timeout'
-import {VERSION} from '../version'
 
 export type {HttpBody}
 
-const USER_AGENT = `sqd-core/${VERSION} (sqd.ai)`
+const USER_AGENT = 'sqd-core/http-client (sqd.ai)'
 
 export interface HttpClientOptions {
     baseUrl?: string
@@ -129,7 +128,7 @@ export class HttpClient implements BaseHttpClient {
                     httpRequestHeaders: Array.from(req.headers),
                     httpRequestBody: req.body,
                 },
-                'http request',
+                'http request'
             )
         }
     }
@@ -164,7 +163,7 @@ export class HttpClient implements BaseHttpClient {
                     httpResponseStatus: status,
                     httpResponseHeaders: Array.from(headers),
                 },
-                'http headers',
+                'http headers'
             )
         }
     }
@@ -182,7 +181,7 @@ export class HttpClient implements BaseHttpClient {
                     httpRequestId: req.id,
                     httpResponseBody,
                 },
-                'http body',
+                'http body'
             )
         }
     }
@@ -293,7 +292,7 @@ export class HttpClient implements BaseHttpClient {
             res.status,
             res.headers,
             body,
-            body instanceof ReadableStream,
+            body instanceof ReadableStream
         )
         this.afterResponse(req, httpResponse)
         return httpResponse
@@ -367,7 +366,7 @@ export class HttpResponse<T = any> {
         public readonly status: number,
         public readonly headers: Headers,
         public readonly body: T,
-        public readonly stream: boolean,
+        public readonly stream: boolean
     ) {}
 
     get ok(): boolean {

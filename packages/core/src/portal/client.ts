@@ -8,10 +8,19 @@ import {
 } from '../http-client'
 import {addErrorContext, last, unexpectedCase, wait, withErrorContext} from '../internal/misc'
 import {createFuture, type Future} from '../internal/async'
-import type {evm, PortalBlock, PortalQuery, solana, substrate} from './query'
+import {
+    getBlockSchema,
+    type GetBlock,
+    type evm,
+    type PortalQuery,
+    type Query,
+    type solana,
+    type substrate,
+} from './query'
 import type {Simplify} from './query/common'
+import {cast} from '../validation'
 
-const USER_AGENT = '@subsquid/portal-client (https://sqd.ai)'
+const USER_AGENT = 'sqd-core/portal-client (https://sqd.ai)'
 
 export interface PortalClientOptions {
     /**
@@ -85,14 +94,6 @@ export type PortalStreamData<B> = {
 
 export interface PortalStream<B> extends AsyncIterable<PortalStreamData<B>> {}
 
-export type GetBlock<Q extends evm.Query | solana.Query | substrate.Query> = Q['type'] extends 'evm'
-    ? evm.Block<Q['fields']>
-    : Q['type'] extends 'solana'
-      ? solana.Block<Q['fields']>
-      : Q['type'] extends 'substrate'
-        ? substrate.Block<Q['fields']>
-        : PortalBlock
-
 export type BlockRef = {
     hash: string
     number: number
@@ -147,21 +148,15 @@ export class PortalClient {
         return res.body ?? undefined
     }
 
-    getFinalizedStream<Q extends evm.Query | solana.Query | substrate.Query, R extends GetBlock<Q> = GetBlock<Q>>(
-        query: Q,
-        options?: PortalStreamOptions,
-    ): PortalStream<R> {
+    getFinalizedStream<Q extends Query>(query: Q, options?: PortalStreamOptions): PortalStream<GetBlock<Q>> {
         return createPortalStream(query, this.getStreamOptions(options), async (q, o) =>
-            this.getStreamRequest('finalized-stream', q, o),
+            this.getStreamRequest('finalized-stream', q, o)
         )
     }
 
-    getStream<Q extends evm.Query | solana.Query | substrate.Query, R extends GetBlock<Q> = GetBlock<Q>>(
-        query: Q,
-        options?: PortalStreamOptions,
-    ): PortalStream<R> {
+    getStream<Q extends Query>(query: Q, options?: PortalStreamOptions): PortalStream<GetBlock<Q>> {
         return createPortalStream(query, this.getStreamOptions(options), async (q, o) =>
-            this.getStreamRequest('stream', q, o),
+            this.getStreamRequest('stream', q, o)
         )
     }
 
@@ -195,7 +190,7 @@ export class PortalClient {
             }).catch(
                 withErrorContext({
                     query: query,
-                }),
+                })
             )
 
             switch (res.status) {
@@ -248,18 +243,19 @@ function isForkHttpError(err: unknown): err is HttpError {
     return true
 }
 
-function createPortalStream<Q extends PortalQuery = PortalQuery, R extends PortalBlock = any>(
+function createPortalStream<Q extends Query>(
     query: Q,
     options: Required<PortalStreamOptions>,
     requestStream: (
         query: Q,
-        options?: PortalRequestOptions,
-    ) => Promise<{finalizedHead?: BlockRef; stream?: AsyncIterable<string[]> | null | undefined}>,
-): PortalStream<R> {
+        options?: PortalRequestOptions
+    ) => Promise<{finalizedHead?: BlockRef; stream?: AsyncIterable<string[]> | null | undefined}>
+): PortalStream<GetBlock<Q>> {
     let {headPollInterval, request, ...bufferOptions} = options
 
-    let buffer = new PortalStreamBuffer<R>(bufferOptions)
+    let buffer = new PortalStreamBuffer<GetBlock<Q>>(bufferOptions)
 
+    let schema = getBlockSchema(query)
     let {fromBlock = 0, toBlock, parentBlockHash} = query
 
     const ingest = async () => {
@@ -275,7 +271,7 @@ function createPortalStream<Q extends PortalQuery = PortalQuery, R extends Porta
             {
                 ...request,
                 abort: buffer.signal,
-            },
+            }
         )
 
         const finalizedHead = res.finalizedHead
@@ -296,14 +292,16 @@ function createPortalStream<Q extends PortalQuery = PortalQuery, R extends Porta
         let iterator = res.stream[Symbol.asyncIterator]()
         try {
             while (true) {
+                buffer.signal.throwIfAborted()
+
                 let data = await iterator.next()
                 if (data.done) break
 
-                let blocks: R[] = []
+                let blocks: GetBlock<Q>[] = []
                 let bytes = 0
 
                 for (let line of data.value) {
-                    let block = JSON.parse(line) as R
+                    let block = cast(schema, JSON.parse(line))
                     blocks.push(block)
                     bytes += line.length
 
@@ -314,23 +312,19 @@ function createPortalStream<Q extends PortalQuery = PortalQuery, R extends Porta
                 await buffer.put({blocks, finalizedHead, meta: {bytes}})
             }
 
-            buffer.flush()
+            return ingest()
         } catch (err) {
-            if (buffer.signal.aborted || isStreamAbortedError(err)) {
-                // ignore
-            } else {
-                throw err
-            }
-        } finally {
-            await iterator?.return?.().catch(() => {})
-        }
+            await iterator.return?.().catch(() => {})
 
-        return ingest()
+            if (buffer.signal.aborted || isStreamAbortedError(err)) return
+
+            throw err
+        }
     }
 
     ingest().then(
         () => buffer.close(),
-        (err) => buffer.fail(err),
+        (err) => buffer.fail(err)
     )
 
     return buffer.iterate()
@@ -546,15 +540,12 @@ class LineSplitter {
 export class ForkException extends Error {
     readonly name = 'ForkError'
 
-    constructor(
-        readonly lastBlocks: BlockRef[],
-        readonly head: BlockRef,
-    ) {
+    constructor(readonly lastBlocks: BlockRef[], readonly head: BlockRef) {
         let parent = last(lastBlocks)
         super(
             `expected ${head.number + 1} to have parent ${parent.number}#${parent.hash}, but got ${head.number}#${
                 head.hash
-            }`,
+            }`
         )
     }
 }

@@ -134,7 +134,7 @@ function createProgressTracker<
         transformer: async (opts) => {
             return {
                 offset: opts.offset,
-                ref: BlockId,
+                ref: opts.ref,
                 transform: async (batch) => {
                     if (batch.data.length > 0) {
                         const {offset, head, finalizedHead, data} = batch

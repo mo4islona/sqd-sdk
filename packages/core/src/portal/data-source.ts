@@ -2,11 +2,11 @@ import {last} from '../internal/misc'
 import {Throttler} from '../internal/throttler'
 import {type Data, type DataBatch, DataReader, DataRef, DataSource, ForkException} from '../pipeline'
 import {isForkException, PortalClient, type BlockRef, type PortalClientOptions} from './client'
-import type {evm, solana, substrate} from './query'
+import type {GetBlock, Query} from './query'
 
-export interface PortalDataSourceOptions {
+export interface PortalDataSourceOptions<TQuery extends Query> {
     portal: PortalClientOptions | PortalClient
-    query: evm.Query | solana.Query | substrate.Query
+    query: TQuery
 }
 
 export const BlockId = {
@@ -27,11 +27,15 @@ function calculateHead(portalHead: BlockRef, lastBlock: BlockRef | undefined): B
     return BlockId.compare(lastBlock, portalHead).isGreater ? lastBlock : portalHead
 }
 
-export function portalDataSource<T extends Data<any, BlockRef>>(options: PortalDataSourceOptions): DataSource<T, true> {
+export type PortalData<TQuery extends Query> = Data<GetBlock<TQuery>, BlockRef>
+
+export function portalDataSource<TQuery extends Query>(
+    options: PortalDataSourceOptions<TQuery>
+): DataSource<PortalData<TQuery>, true> {
     const portal = options.portal instanceof PortalClient ? options.portal : new PortalClient(options.portal)
     const headThrottler = new Throttler(async () => portal.getHead(), 5_000)
 
-    const createDataStream = async function* (offset?: T['id']): AsyncIterableIterator<DataBatch<T>> {
+    const createDataStream = async function* (offset?: BlockRef): AsyncIterableIterator<DataBatch<PortalData<TQuery>>> {
         let parentBlockHash: string | undefined
         let fromBlock = options.query.fromBlock ?? 0
         if (offset) {
@@ -52,8 +56,10 @@ export function portalDataSource<T extends Data<any, BlockRef>>(options: PortalD
                 const portalHead = await headThrottler.get()
                 if (!portalHead) continue // no data?
 
-                // FIXME: how to type this?
-                const data = batch.blocks.map((value) => ({value, id: BlockId.fromBlock(value)})) as T[]
+                const data = batch.blocks.map((value) => ({
+                    value,
+                    id: BlockId.fromBlock(value),
+                }))
 
                 const offset = last(data).id
                 const head = calculateHead(portalHead, offset)
@@ -68,7 +74,7 @@ export function portalDataSource<T extends Data<any, BlockRef>>(options: PortalD
             }
         } catch (err) {
             if (isForkException(err)) {
-                throw new ForkException<T['id']>({heads: err.lastBlocks})
+                throw new ForkException({heads: err.lastBlocks})
             }
             throw err
         }
@@ -76,6 +82,7 @@ export function portalDataSource<T extends Data<any, BlockRef>>(options: PortalD
 
     return new DataSource({
         unfinalized: true,
-        reader: async (opts) => DataReader.fromAsync(createDataStream(opts.offset), BlockId),
+        ref: BlockId,
+        reader: async (opts) => createDataStream(opts.offset),
     })
 }
