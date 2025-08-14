@@ -2,36 +2,35 @@ import {isForkException} from './errors'
 import type {Data, DataBatch, DataFork, DataRef} from './data'
 
 export interface DataReaderOptions<TData extends Data> {
-    offset?: TData['id'] | undefined
+    offset: TData['id'] | undefined
 }
 
 export interface DataReader<TData extends Data> extends AsyncIterator<DataBatch<TData>> {}
 
 export interface DataReaderReadOptions<TData extends Data> {
-    offset?: TData['id'] | undefined
+    offset: TData['id'] | undefined
 }
 
 export namespace DataReader {
     export const fromAsync = <TData extends Data>(
-        asyncIterator: AsyncIterable<DataBatch<TData>>
+        asyncIterable: AsyncIterable<DataBatch<TData>>
     ): DataReader<TData> => {
-        const iterator = asyncIterator[Symbol.asyncIterator]()
+        const it = asyncIterable[Symbol.asyncIterator]()
 
-        // FIXME: should not define methods if they don't exist
-        return {
-            next: async () => {
-                const {done, value} = await iterator.next()
-                return {done, value}
-            },
-            return: async () => {
-                await iterator.return?.()
-                return {done: true, value: undefined}
-            },
-            throw: async (err) => {
-                await iterator.throw?.(err)
-                return {done: true, value: undefined}
-            },
+        const wrapper: AsyncIterator<DataBatch<TData>> = {
+            next: async () => it.next(),
         }
+
+        if (typeof it.return === 'function') {
+            const returnFn = it.return
+            wrapper.return = async () => returnFn()
+        }
+        if (typeof it.throw === 'function') {
+            const throwFn = it.throw
+            wrapper.throw = async (err?: any) => throwFn(err)
+        }
+
+        return wrapper
     }
 }
 
@@ -45,7 +44,7 @@ export interface DataSource<TData extends Data, TUnfinalized extends boolean> ex
         duplex: PipableThrough<TData, UData, TUnfinalized extends true ? true : boolean, UUnfinalized>
     ): DataSource<UData, UUnfinalized>
     pipeTo(target: DataTarget<TData, TUnfinalized extends true ? true : boolean>): Promise<void>
-    close(): Promise<void>
+    close(reason?: any): Promise<void>
 }
 
 export interface DataWriterOptions<TData extends Data> {
@@ -58,25 +57,24 @@ export interface DataTargetWriteOptions<TData extends Data> {
 }
 
 export interface FinalizedDataWriter<TData extends Data, TReturn = unknown> {
-    offset: TData['id'] | undefined
-    next(batch: DataBatch<TData>): Promise<IteratorResult<TData['id'] | undefined, TReturn>>
+    next(batch?: DataBatch<TData> | undefined): Promise<IteratorResult<TData['id'] | undefined, TReturn>>
     return?(): Promise<IteratorReturnResult<TReturn>>
     fork?(fork: DataFork<TData['id']>): Promise<IteratorResult<TData['id'] | undefined, TReturn>>
 }
 
 export interface UnfinalizedDataWriter<TData extends Data, TReturn = unknown>
     extends FinalizedDataWriter<TData, TReturn> {
-    fork?(fork: DataFork<TData['id']>): Promise<IteratorResult<TData['id'] | undefined, TReturn>>
+    fork(fork: DataFork<TData['id']>): Promise<IteratorResult<TData['id'] | undefined, TReturn>>
 }
 
-export type DataWriter<TData extends Data, TUnfinalized extends boolean> = TUnfinalized extends false
+export type DataWriter<TData extends Data, TUnfinalized extends boolean> = TUnfinalized extends true
     ? UnfinalizedDataWriter<TData>
     : FinalizedDataWriter<TData>
 
 export interface DataTarget<TData extends Data, TUnfinalized extends boolean> {
     readonly unfinalized: TUnfinalized
     write(opts: DataTargetWriteOptions<TData>): Promise<void>
-    close(): Promise<void>
+    close(reason?: any): Promise<void>
 }
 
 export interface DataDuplex<
@@ -138,33 +136,26 @@ export const DataSource: {
     readonly ref: DataRef<TData['id']>
 
     private _state: 'opened' | 'locked' | 'closed' = 'opened'
-    private _abortController: AbortController | undefined
+    private _abortController?: AbortController
     private _reader: (opts: DataReaderReadOptions<TData>) => PromiseLike<DataReader<TData>>
-    private _closePromise: Promise<void> | undefined
+    private _closePromise?: Promise<void>
 
     constructor(config: DataSourceConfig<TData, TUnfinalized>) {
         // NOTE: satisfy compiler
-        if (config.unfinalized == null) {
-            this.unfinalized = true as TUnfinalized
-        } else {
-            this.unfinalized = config.unfinalized
-        }
+        this.unfinalized = config.unfinalized == null ? (true as TUnfinalized) : config.unfinalized
         this._reader = config.reader
         this.ref = config.ref
     }
 
-    read(opts: DataReaderReadOptions<TData> = {}): DataStream<TData> {
+    read(opts: DataReaderReadOptions<TData> = {offset: undefined}): DataStream<TData> {
         if (this._state === 'closed') {
             throw new Error('DataSource is already closed')
         }
-
         if (this._state === 'locked') {
             throw new Error('DataSource is locked')
         }
         this._state = 'locked'
-
         this._abortController = new AbortController()
-
         let reader: DataReader<TData> | undefined
 
         return {
@@ -191,22 +182,21 @@ export const DataSource: {
                     throw err
                 }
             },
+
             return: async (): Promise<IteratorResult<DataBatch<TData>>> => {
                 await reader?.return?.().catch(() => {})
                 this._abortController = undefined
-                if (this._state === 'locked') {
-                    this._state = 'opened'
-                }
+                if (this._state === 'locked') this._state = 'opened'
                 return {done: true, value: undefined}
             },
-            throw: async (err) => {
+
+            throw: async (err: any) => {
                 await reader?.return?.().catch(() => {})
                 this._abortController = undefined
-                if (this._state === 'locked') {
-                    this._state = 'opened'
-                }
+                if (this._state === 'locked') this._state = 'opened'
                 throw err
             },
+
             [Symbol.asyncIterator]() {
                 return this
             },
@@ -223,6 +213,7 @@ export const DataSource: {
         pipe(this, duplex.target).catch((err) => {
             throw err
         })
+
         return duplex.source
     }
 
@@ -234,7 +225,6 @@ export const DataSource: {
         if (this._state === 'closed') {
             return this._closePromise
         }
-
         this._closePromise = this._closePromise || this._performClose(reason)
         return this._closePromise
     }
@@ -266,7 +256,6 @@ export interface DataTargetConfig<TData extends Data, TUnfinalized extends boole
     unfinalized?: TUnfinalized
 }
 
-// NOTE: workaround to allow constructor overloading
 export const DataTarget: {
     new <TData extends Data, TUnfinalized extends boolean>(config: DataTargetConfig<TData, TUnfinalized>): DataTarget<
         TData,
@@ -276,19 +265,13 @@ export const DataTarget: {
     readonly unfinalized: TUnfinalized
 
     private _state: 'opened' | 'locked' | 'closed' = 'opened'
-    private _abortController: AbortController | undefined
-    private _writer: (
-        opts: DataTargetWriteOptions<TData>
-    ) => PromiseLike<FinalizedDataWriter<TData> | UnfinalizedDataWriter<TData>>
-    private _closePromise: Promise<void> | undefined
+    private _abortController?: AbortController
+    private _writer: (opts: DataTargetWriteOptions<TData>) => PromiseLike<DataWriter<TData, TUnfinalized>>
+    private _closePromise?: Promise<void>
 
     constructor(config: DataTargetConfig<TData, TUnfinalized>) {
         // NOTE: satisfy compiler
-        if (config.unfinalized == null) {
-            this.unfinalized = true as TUnfinalized
-        } else {
-            this.unfinalized = config.unfinalized
-        }
+        this.unfinalized = config.unfinalized == null ? (true as TUnfinalized) : config.unfinalized
         this._writer = config.writer
     }
 
@@ -296,7 +279,6 @@ export const DataTarget: {
         if (this._state === 'closed') {
             throw new Error('DataTarget is closed')
         }
-
         if (this._state === 'locked') {
             throw new Error('DataTarget is already locked')
         }
@@ -320,10 +302,11 @@ export const DataTarget: {
             let batch: DataBatch<TData> | undefined
             try {
                 const {done, value} = await stream.next()
-                if (done) return writer.return?.()
+                if (done) {
+                    return writer.return?.()
+                }
                 batch = value
             } catch (err) {
-                // FIXME: do we need to return?
                 await stream.return?.().catch(() => {})
 
                 if (!isForkException<TData>(err)) {
@@ -340,25 +323,29 @@ export const DataTarget: {
                 if (done) return value
                 return processData(value)
             }
+
             validateBatch(opts.ref, currentOffset, batch)
 
-            const {value: newOffset, done} = await writer.next(batch)
-            if (done) return newOffset
+            const {value, done} = await writer.next(batch)
+            if (done) return value
 
             // NOTE: If the offset is not the same as the batch offset,
             // it means that the batch was not fully consumed or we want to skip
             // so we break the current stream and start from the new offset
             // FIXME: Do we want this behavior?
-            if (!newOffset || !opts.ref.compare(newOffset, batch.offset).isEqual) {
+            if (!value || !opts.ref.compare(value, batch.offset).isEqual) {
                 await stream.return?.().catch(() => {})
-                return processData(newOffset)
+                return processData(value)
             }
 
-            return processStream(stream, newOffset)
+            return processStream(stream, batch.offset)
         }
 
         try {
-            await processData(writer.offset)
+            const {value, done} = await writer.next()
+            if (done) return
+
+            await processData(value)
         } finally {
             this._abortController = undefined
             if (this._state === 'locked') {
@@ -371,7 +358,6 @@ export const DataTarget: {
         if (this._state === 'closed') {
             return this._closePromise
         }
-
         this._closePromise = this._closePromise || this._performClose(reason)
         return this._closePromise
     }

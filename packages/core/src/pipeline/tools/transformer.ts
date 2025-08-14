@@ -23,27 +23,20 @@ export function transformer<TData extends Data, UData extends Data, TUnfinalized
 ): DataDuplexFactory<TData, UData, TUnfinalized, TUnfinalized> {
     return (parent) => {
         const queue = new SyncQueue<DataBatch<UData>>()
-        let offsetFuture: Future<UData['id'] | undefined> = createFuture()
         let refFuture: Future<DataRef<UData['id']>> = createFuture()
+        let transformerFuture: Future<DataTransformer<TData, UData>> = createFuture()
 
         const target = new DataTarget<TData, TUnfinalized>({
             unfinalized: parent.unfinalized,
             writer: async (opts: DataWriterOptions<TData>) => {
-                const transformer = await config.transformer({
-                    offset: await offsetFuture.promise(),
-                    ref: opts.ref,
-                })
-
-                refFuture.resolve(transformer.ref)
-
-                if (parent.unfinalized && !transformer.fork) {
-                    throw new TypeError('Missing fork method in unfinalized DataTransformer')
-                }
+                refFuture.resolve(opts.ref)
 
                 return {
-                    offset: transformer.offset,
-                    async next(batch: DataBatch<TData>) {
+                    async next(batch: DataBatch<TData> | undefined) {
+                        const transformer = await transformerFuture.promise()
                         if (queue.isClosed) return {done: true, value: undefined}
+
+                        if (!batch) return {done: false, value: transformer.offset}
 
                         const data = await transformer.transform(batch)
                         await queue.put(data)
@@ -64,12 +57,16 @@ export function transformer<TData extends Data, UData extends Data, TUnfinalized
             unfinalized: parent.unfinalized,
             ref: {} as any,
             reader: async (opts) => {
-                offsetFuture.resolve(opts.offset)
-
                 const ref = await refFuture.promise()
 
-                return {
+                const transformer = await config.transformer({
+                    offset: opts.offset,
                     ref,
+                })
+
+                transformerFuture.resolve(transformer)
+
+                return {
                     async next(): Promise<IteratorResult<DataBatch<UData>>> {
                         if (queue.isClosed) return {done: true, value: undefined}
 
