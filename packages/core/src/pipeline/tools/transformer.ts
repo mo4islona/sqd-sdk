@@ -27,10 +27,9 @@ export function transformer<TData extends Data, UData extends Data, TUnfinalized
         let transformerFuture: Future<DataTransformer<TData, UData>> = createFuture()
 
         const target = new DataTarget<TData, TUnfinalized>({
-            unfinalized: parent.unfinalized,
-            writer: async (opts: DataWriterOptions<TData>) => {
-                refFuture.resolve(opts.ref)
-
+            unfinalized: parent.unfinalized as TUnfinalized,
+            ref: parent.ref,
+            writer: async () => {
                 return {
                     async next(batch: DataBatch<TData> | undefined) {
                         const transformer = await transformerFuture.promise()
@@ -54,8 +53,8 @@ export function transformer<TData extends Data, UData extends Data, TUnfinalized
         })
 
         const source = new DataSource<UData, TUnfinalized>({
-            unfinalized: parent.unfinalized,
-            ref: {} as any,
+            unfinalized: parent.unfinalized as TUnfinalized,
+            ref: parent.ref,
             reader: async (opts) => {
                 const ref = await refFuture.promise()
 

@@ -9,6 +9,7 @@ import {
     type DataDuplexFactory,
     type DataDuplex,
     DataSource,
+    DataTargetFactory,
 } from '@sqd-sdk/core/pipeline'
 import {BlockId, PortalClient} from '@sqd-sdk/core/portal'
 import {type SolanaPortalData, solanaPortalDataSource} from '@sqd-sdk/solana-stream'
@@ -61,20 +62,21 @@ async function main() {
     })
         .pipeThrough(createProgressTracker('solana'))
         .pipeTo(
-            new DataTarget({
-                unfinalized: true,
-                writer: async (opts) => {
-                    return {
-                        offset: undefined,
-                        next: async (batch) => {
-                            return {done: false, value: batch.offset}
-                        },
-                        fork: async (fork) => {
-                            return {done: false, value: fork.heads[fork.heads.length - 1]}
-                        },
-                    }
-                },
-            }),
+            (opts) =>
+                new DataTarget({
+                    unfinalized: true,
+                    ref: opts.ref,
+                    writer: async () => {
+                        return {
+                            next: async (batch) => {
+                                return {done: false, value: batch?.offset}
+                            },
+                            fork: async (fork) => {
+                                return {done: false, value: fork.heads[fork.heads.length - 1]}
+                            },
+                        }
+                    },
+                })
         )
 
     console.log('end')
@@ -86,47 +88,49 @@ interface StateManager<T extends Data<any, any>> {
     fork(refs: T['id'][]): Promise<T['id'] | undefined>
 }
 
-function createStateTarget<T extends Data<any, any>>(opts: {
-    state: StateManager<T>
-    transact: (batch: DataBatch<T>) => Promise<unknown>
-    rollback: (block: DataRef<T>) => Promise<unknown>
-}): DataTarget<T, true> {
-    const {state, transact, rollback} = opts
+// function createStateTarget<T extends Data<any, any>>(opts: {
+//     state: StateManager<T>
+//     transact: (batch: DataBatch<T>) => Promise<unknown>
+//     rollback: (block: DataRef<T>) => Promise<unknown>
+// }): DataTargetFactory<T, true> {
+//     const {state, transact, rollback} = opts
 
-    return new DataTarget({
-        unfinalized: true,
-        writer: async () => {
-            const head = await state.get()
-            if (head) {
-                await rollback(head)
-            }
+//     return (opts) =>
+//         new DataTarget({
+//             unfinalized: opts.unfinalized,
+//             ref: opts.ref,
+//             writer: async () => {
+//                 const head = await state.get()
+//                 if (head) {
+//                     await rollback(head)
+//                 }
 
-            return {
-                offset: head,
-                next: async (batch) => {
-                    await transact(batch)
+//                 return {
+//                     offset: head,
+//                     next: async (batch) => {
+//                         await transact(batch)
 
-                    if (batch.data.length > 0) {
-                        await state.set(batch.data[batch.data.length - 1].id)
-                    }
+//                         if (batch.data.length > 0) {
+//                             await state.set(batch.data[batch.data.length - 1].id)
+//                         }
 
-                    return {done: false, value: batch.offset}
-                },
-                fork: async (fork) => {
-                    const newHead = await state.fork(fork.heads)
-                    if (newHead) {
-                        await rollback(newHead)
-                    }
-                    return {done: false, value: newHead}
-                },
-            }
-        },
-    })
-}
+//                         return {done: false, value: batch.offset}
+//                     },
+//                     fork: async (fork) => {
+//                         const newHead = await state.fork(fork.heads)
+//                         if (newHead) {
+//                             await rollback(newHead)
+//                         }
+//                         return {done: false, value: newHead}
+//                     },
+//                 }
+//             },
+//         })
+// }
 
 function createProgressTracker<
     T extends Data<{header: {timestamp: number}}, {number: number}>,
-    TFinalized extends boolean,
+    TFinalized extends boolean
 >(prefix: string): DataDuplexFactory<T, T, TFinalized, TFinalized> {
     const logger = createLogger(`sqd:${prefix}`)
 
@@ -142,9 +146,10 @@ function createProgressTracker<
                             [
                                 `progress: ${offset.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
                                 `blocks: ${batch.data.length}, lag: ${(
-                                    (Date.now() - data[data.length - 1].value.header.timestamp * 1000) / 1000
+                                    (Date.now() - data[data.length - 1].value.header.timestamp * 1000) /
+                                    1000
                                 ).toFixed(2)}s`,
-                            ].join(', '),
+                            ].join(', ')
                         )
                     }
                     return batch

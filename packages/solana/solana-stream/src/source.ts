@@ -31,13 +31,13 @@ export interface SolanaPortalDataReaderOptions<Q extends SolanaQueryOptions> {
 export type SolanaPortalData<Q extends SolanaQueryOptions> = Data<Block<GetFields<Q['fields']>>, BlockRef>
 
 export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
-    options: SolanaPortalDataReaderOptions<Q>,
+    options: SolanaPortalDataReaderOptions<Q>
 ): DataSource<SolanaPortalData<Q>, true> {
     const fields = getFields(options.query.fields)
     const requests = mergeRangeRequests(options.query.requests, mergeDataRequests)
 
     const createDataStream = async function* (
-        offset?: BlockRef,
+        offset?: BlockRef
     ): AsyncIterableIterator<DataBatch<SolanaPortalData<Q>>> {
         const requestsBounded = offset ? applyRangeBound(requests, {from: offset.number + 1}) : requests
 
@@ -61,13 +61,14 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
 
     return new DataSource({
         unfinalized: true,
-        reader: async (opts) => DataReader.fromAsync(createDataStream(opts.offset), BlockId),
+        ref: BlockId,
+        reader: async (opts) => createDataStream(opts.offset),
     })
 }
 
 export function mapBlock<F extends RequiredFieldSelection>(
     rawBlock: unknown,
-    fields: RequiredFieldSelection,
+    fields: RequiredFieldSelection
 ): Block<F> {
     const validator = getDataSchema(fields)
     const partial = cast(validator, rawBlock) as BlockPartial<F>

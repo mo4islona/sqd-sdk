@@ -43,7 +43,7 @@ export interface DataSource<TData extends Data, TUnfinalized extends boolean> ex
     pipeThrough<UData extends Data, UUnfinalized extends boolean>(
         duplex: PipableThrough<TData, UData, TUnfinalized extends true ? true : boolean, UUnfinalized>
     ): DataSource<UData, UUnfinalized>
-    pipeTo(target: DataTarget<TData, TUnfinalized extends true ? true : boolean>): Promise<void>
+    pipeTo(target: PipableTo<TData, TUnfinalized extends true ? true : boolean>): Promise<void>
     close(reason?: any): Promise<void>
 }
 
@@ -52,8 +52,8 @@ export interface DataWriterOptions<TData extends Data> {
 }
 
 export interface DataTargetWriteOptions<TData extends Data> {
-    ref: DataRef<TData['id']>
-    read: (opts: DataReaderReadOptions<TData>) => DataStream<TData>
+    // FIXME: shutup linter
+    _?: TData
 }
 
 export interface FinalizedDataWriter<TData extends Data, TReturn = unknown> {
@@ -73,7 +73,11 @@ export type DataWriter<TData extends Data, TUnfinalized extends boolean> = TUnfi
 
 export interface DataTarget<TData extends Data, TUnfinalized extends boolean> {
     readonly unfinalized: TUnfinalized
-    write(opts: DataTargetWriteOptions<TData>): Promise<void>
+
+    write(
+        opts: DataTargetWriteOptions<TData>,
+        read: (offset: TData['id'] | undefined) => DataStream<TData>
+    ): Promise<void>
     close(reason?: any): Promise<void>
 }
 
@@ -87,12 +91,25 @@ export interface DataDuplex<
     source: DataSource<UData, UUnfinalized>
 }
 
+export interface DataFactoryOptions<TData extends Data, TUnfinalized extends boolean> {
+    unfinalized: TUnfinalized
+    ref: DataRef<TData['id']>
+}
+
+export type DataTargetFactory<TData extends Data, TUnfinalized extends boolean> = (
+    opts: DataFactoryOptions<TData, TUnfinalized>
+) => DataTarget<TData, TUnfinalized>
+
+export type PipableTo<TData extends Data, TUnfinalized extends boolean> =
+    | DataTarget<TData, TUnfinalized>
+    | DataTargetFactory<TData, TUnfinalized>
+
 export type DataDuplexFactory<
     TData extends Data,
     UData extends Data,
     TUnfinalized extends boolean,
     UUnfinalized extends boolean
-> = (opts: {unfinalized: TUnfinalized}) => DataDuplex<TData, UData, TUnfinalized, UUnfinalized>
+> = (opts: DataFactoryOptions<TData, TUnfinalized>) => DataDuplex<TData, UData, TUnfinalized, UUnfinalized>
 
 export type PipableThrough<
     TData extends Data,
@@ -110,10 +127,7 @@ async function pipe<TData extends Data, TUnfinalized extends boolean>(
     }
 
     try {
-        return await target.write({
-            ref: source.ref,
-            read: (opts) => source.read(opts),
-        })
+        return await target.write({}, (offset) => source.read({offset}))
     } finally {
         await source.close?.().catch(() => {})
         await target.close?.().catch(() => {})
@@ -137,14 +151,16 @@ export const DataSource: {
 
     private _state: 'opened' | 'locked' | 'closed' = 'opened'
     private _abortController?: AbortController
-    private _reader: (opts: DataReaderReadOptions<TData>) => PromiseLike<DataReader<TData>>
     private _closePromise?: Promise<void>
+
+    private _reader: (opts: DataReaderReadOptions<TData>) => PromiseLike<DataReader<TData>>
 
     constructor(config: DataSourceConfig<TData, TUnfinalized>) {
         // NOTE: satisfy compiler
         this.unfinalized = config.unfinalized == null ? (true as TUnfinalized) : config.unfinalized
-        this._reader = config.reader
         this.ref = config.ref
+
+        this._reader = config.reader
     }
 
     read(opts: DataReaderReadOptions<TData> = {offset: undefined}): DataStream<TData> {
@@ -207,7 +223,10 @@ export const DataSource: {
         duplex: PipableThrough<TData, UData, TUnfinalized extends true ? true : boolean, UUnfinalized>
     ): DataSource<UData, UUnfinalized> {
         if (typeof duplex === 'function') {
-            duplex = duplex({unfinalized: this.unfinalized as any}) // FIXME: how to type this?
+            duplex = duplex({
+                unfinalized: this.unfinalized as any, // FIXME: how to type this?
+                ref: this.ref,
+            })
         }
 
         pipe(this, duplex.target).catch((err) => {
@@ -217,7 +236,14 @@ export const DataSource: {
         return duplex.source
     }
 
-    pipeTo(target: DataTarget<TData, TUnfinalized extends true ? true : boolean>): Promise<void> {
+    pipeTo(target: PipableTo<TData, TUnfinalized extends true ? true : boolean>): Promise<void> {
+        if (typeof target === 'function') {
+            target = target({
+                unfinalized: this.unfinalized as any, // FIXME: how to type this?
+                ref: this.ref,
+            })
+        }
+
         return pipe(this, target)
     }
 
@@ -254,6 +280,7 @@ export function source<TData extends Data, TUnfinalized extends boolean>(
 export interface DataTargetConfig<TData extends Data, TUnfinalized extends boolean = true> {
     writer: (opts: DataTargetWriteOptions<TData>) => PromiseLike<DataWriter<TData, NoInfer<TUnfinalized>>>
     unfinalized?: TUnfinalized
+    ref: DataRef<TData['id']>
 }
 
 export const DataTarget: {
@@ -263,6 +290,7 @@ export const DataTarget: {
     >
 } = class<TData extends Data, TUnfinalized extends boolean> implements DataTarget<TData, TUnfinalized> {
     readonly unfinalized: TUnfinalized
+    readonly ref: DataRef<TData['id']>
 
     private _state: 'opened' | 'locked' | 'closed' = 'opened'
     private _abortController?: AbortController
@@ -272,10 +300,14 @@ export const DataTarget: {
     constructor(config: DataTargetConfig<TData, TUnfinalized>) {
         // NOTE: satisfy compiler
         this.unfinalized = config.unfinalized == null ? (true as TUnfinalized) : config.unfinalized
+        this.ref = config.ref
         this._writer = config.writer
     }
 
-    async write(opts: DataTargetWriteOptions<TData>): Promise<void> {
+    async write(
+        opts: DataTargetWriteOptions<TData>,
+        read: (offset: TData['id'] | undefined) => DataStream<TData>
+    ): Promise<void> {
         if (this._state === 'closed') {
             throw new Error('DataTarget is closed')
         }
@@ -289,7 +321,7 @@ export const DataTarget: {
         const processData = async (offset: TData['id'] | undefined): Promise<unknown> => {
             this._abortController?.signal.throwIfAborted()
 
-            const stream = opts.read({offset})
+            const stream = read({offset})
             return processStream(stream, offset)
         }
 
@@ -324,7 +356,7 @@ export const DataTarget: {
                 return processData(value)
             }
 
-            validateBatch(opts.ref, currentOffset, batch)
+            validateBatch(this.ref, currentOffset, batch)
 
             const {value, done} = await writer.next(batch)
             if (done) return value
@@ -333,7 +365,7 @@ export const DataTarget: {
             // it means that the batch was not fully consumed or we want to skip
             // so we break the current stream and start from the new offset
             // FIXME: Do we want this behavior?
-            if (!value || !opts.ref.compare(value, batch.offset).isEqual) {
+            if (!value || !this.ref.compare(value, batch.offset).isEqual) {
                 await stream.return?.().catch(() => {})
                 return processData(value)
             }
