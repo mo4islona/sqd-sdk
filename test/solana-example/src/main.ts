@@ -10,6 +10,7 @@ import {
     type DataDuplex,
     DataSource,
     DataTargetFactory,
+    pipeline,
 } from '@sqd-sdk/core/pipeline'
 import {BlockId, PortalClient} from '@sqd-sdk/core/portal'
 import {type SolanaPortalData, solanaPortalDataSource} from '@sqd-sdk/solana-stream'
@@ -28,39 +29,44 @@ async function main() {
 
     console.log(`processing range: [${fromBlock}, ${toBlock ?? null}]`)
 
-    await solanaPortalDataSource({
-        portal,
-        query: {
-            fields: {
-                block: {number: true, timestamp: true, hash: true, parentHash: true},
-                transaction: {signatures: true, err: true, transactionIndex: true},
-                instruction: {
-                    programId: true,
-                    accounts: true,
-                    data: true,
-                    isCommitted: true,
-                    transactionIndex: true,
-                    instructionAddress: true,
-                },
-            },
-            requests: [
-                {
-                    range: {from: fromBlock, to: toBlock},
-                    request: {
-                        instructions: [
-                            {
-                                programId: ['whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc'],
-                                d8: ['0xf8c69e91e17587c8'],
-                                isCommitted: true,
-                                innerInstructions: true,
-                            },
-                        ],
+    let last: any = undefined
+
+    await pipeline(
+        solanaPortalDataSource({
+            portal,
+            query: {
+                fields: {
+                    block: {number: true, timestamp: true, hash: true, parentHash: true},
+                    transaction: {signatures: true, err: true, transactionIndex: true},
+                    instruction: {
+                        programId: true,
+                        accounts: true,
+                        data: true,
+                        isCommitted: true,
+                        transactionIndex: true,
+                        instructionAddress: true,
                     },
                 },
-            ],
-        },
-    })
-        .pipeThrough(createProgressTracker('solana'))
+                requests: [
+                    {
+                        range: {from: fromBlock, to: toBlock},
+                        request: {
+                            instructions: [
+                                {
+                                    programId: ['whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc'],
+                                    d8: ['0xf8c69e91e17587c8'],
+                                    isCommitted: true,
+                                    innerInstructions: true,
+                                },
+                            ],
+                        },
+                    },
+                ],
+            },
+        })
+    )
+        .pipeThrough(createProgressTracker('a'))
+        .pipeThrough(createProgressTracker('b'))
         .pipeTo(
             (opts) =>
                 new DataTarget({
@@ -69,7 +75,9 @@ async function main() {
                     writer: async () => {
                         return {
                             next: async (batch) => {
-                                return {done: false, value: batch?.offset}
+                                let temp = last
+                                last = batch?.offset
+                                return {done: false, value: temp}
                             },
                             fork: async (fork) => {
                                 return {done: false, value: fork.heads[fork.heads.length - 1]}

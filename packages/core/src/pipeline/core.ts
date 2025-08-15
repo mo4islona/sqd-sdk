@@ -34,16 +34,49 @@ export namespace DataReader {
     }
 }
 
+export interface Pipeline<TData extends Data, TUnfinalized extends boolean> {
+    pipeThrough<UData extends Data, UUnfinalized extends boolean>(
+        duplex: PipableThrough<TData, UData, TUnfinalized extends true ? true : boolean, UUnfinalized>
+    ): Pipeline<UData, UUnfinalized>
+    pipeTo(target: PipableTo<TData, TUnfinalized extends true ? true : boolean>): Promise<void>
+}
+
+export function pipeline<TData extends Data, TUnfinalized extends boolean>(
+    source: DataSource<TData, TUnfinalized>
+): Pipeline<TData, TUnfinalized> {
+    return {
+        pipeThrough: (duplex) => {
+            if (typeof duplex === 'function') {
+                duplex = duplex({
+                    unfinalized: source.unfinalized as any, // FIXME: how to type this?
+                    ref: source.ref,
+                })
+            }
+
+            pipe(source, duplex.target).catch((err) => {
+                throw err
+            })
+
+            return pipeline(duplex.source)
+        },
+        pipeTo: (target) => {
+            if (typeof target === 'function') {
+                target = target({
+                    unfinalized: source.unfinalized as any, // FIXME: how to type this?
+                    ref: source.ref,
+                })
+            }
+            return pipe(source, target)
+        },
+    }
+}
+
 export interface DataStream<TData extends Data> extends AsyncIterableIterator<DataBatch<TData>> {}
 
 export interface DataSource<TData extends Data, TUnfinalized extends boolean> extends AsyncIterable<TData['value']> {
     readonly unfinalized: TUnfinalized
     readonly ref: DataRef<TData['id']>
     read(opts: DataReaderReadOptions<TData>): DataStream<TData>
-    pipeThrough<UData extends Data, UUnfinalized extends boolean>(
-        duplex: PipableThrough<TData, UData, TUnfinalized extends true ? true : boolean, UUnfinalized>
-    ): DataSource<UData, UUnfinalized>
-    pipeTo(target: PipableTo<TData, TUnfinalized extends true ? true : boolean>): Promise<void>
     close(reason?: any): Promise<void>
 }
 
@@ -131,6 +164,15 @@ async function pipe<TData extends Data, TUnfinalized extends boolean>(
     } finally {
         await source.close?.().catch(() => {})
         await target.close?.().catch(() => {})
+    }
+}
+
+async function pipe2<TData extends Data, TUnfinalized extends boolean>(
+    source: DataSource<TData, TUnfinalized>,
+    target: DataTarget<TData, TUnfinalized extends true ? true : boolean>
+): Promise<void> {
+    if (source.unfinalized && !target.unfinalized) {
+        throw new TypeError('Cannot pipe from unfinalized DataSource to finalized DataTarget')
     }
 }
 
@@ -321,7 +363,7 @@ export const DataTarget: {
         const processData = async (offset: TData['id'] | undefined): Promise<unknown> => {
             this._abortController?.signal.throwIfAborted()
 
-            const stream = read({offset})
+            const stream = read(offset)
             return processStream(stream, offset)
         }
 
@@ -400,104 +442,22 @@ export const DataTarget: {
     }
 }
 
-// FIXME: which approach is better: function or class?
 export function target<TData extends Data, TUnfinalized extends boolean>(
     config: DataTargetConfig<TData, TUnfinalized>
-): DataTarget<TData, TUnfinalized> {
-    return new DataTarget(config)
+): DataTarget<TData, TUnfinalized>
+export function target<TData extends Data, TUnfinalized extends boolean>(
+    factory: (opts: DataFactoryOptions<TData, TUnfinalized>) => DataTargetConfig<TData, TUnfinalized>
+): DataTargetFactory<TData, TUnfinalized>
+export function target<TData extends Data, TUnfinalized extends boolean>(
+    configOrFactory:
+        | DataTargetConfig<TData, TUnfinalized>
+        | ((opts: DataFactoryOptions<TData, TUnfinalized>) => DataTargetConfig<TData, TUnfinalized>)
+): PipableTo<TData, TUnfinalized> {
+    if (typeof configOrFactory === 'function') {
+        return (opts) => new DataTarget(configOrFactory(opts))
+    }
+    return new DataTarget(configOrFactory)
 }
-
-// export function finalizer<T extends Data>(): DataDuplex<T, T, true, false> {
-//     let buffer: T[] = []
-//     const queue = new SyncQueue<DataBatch<T>>()
-//     let offsetFuture: Future<T['id'] | undefined> = createFuture()
-
-//     const target = new DataTarget<T, true>({
-//         unfinalized: true,
-//         writer: async (opts: DataWriterOptions<T>) => {
-//             const offset = await offsetFuture.promise()
-//             return {
-//                 offset,
-//                 async next(batch: DataBatch<T>) {
-//                     buffer.push(...batch.data)
-
-//                     if (batch.finalizedHead) {
-//                         let unfinalizedIndex = 0
-//                         for (; unfinalizedIndex < buffer.length; unfinalizedIndex++) {
-//                             const ref = buffer[unfinalizedIndex].id
-//                             if (batch.finalizedHead.compare(ref).isLess) break
-//                         }
-
-//                         const data = buffer.splice(0, unfinalizedIndex)
-//                         if (data.length > 0) {
-//                             const offset = data[data.length - 1].id
-//                             await queue.put({
-//                                 data,
-//                                 offset,
-//                                 finalizedHead: batch.finalizedHead,
-//                                 head: batch.finalizedHead,
-//                             })
-//                         }
-//                     }
-
-//                     return batch.offset
-//                 },
-//                 async fork(fork: DataFork<T>): Promise<IteratorResult<T['id'] | undefined>> {
-//                     const forkPoint = findFork(
-//                         buffer.map((data) => data.id),
-//                         fork.heads,
-//                     )
-//                     if (forkPoint === -1) throw new Error('Cannot process fork')
-//                     buffer = buffer.slice(0, forkPoint + 1)
-
-//                     return buffer[buffer.length - 1].id
-//                 },
-//                 async return(): Promise<IteratorResult<T['id'] | undefined>> {
-//                     queue.close()
-//                     return {done: true, value: undefined}
-//                 },
-//             }
-//         },
-//     })
-
-//     const source = new DataSource<T, false>({
-//         unfinalized: false,
-//         reader: async (opts) => {
-//             offsetFuture.resolve(opts.offset)
-
-//             return {
-//                 ref: {compare: (a, b) => DataRef.Greater},
-//                 async next(): Promise<IteratorResult<DataBatch<T>>> {
-//                     return await queue.take()
-//                 },
-//                 async close(): Promise<void> {
-//                     queue.close()
-//                     await target.close().catch(() => {})
-//                 },
-//             }
-//         },
-//     })
-
-//     return {
-//         target,
-//         source,
-//     }
-// }
-
-//function findFork(chainA: DataRef<any>[], chainB: DataRef<any>[]) {
-//    let i = 0
-//    let j = 0
-//    for (; i < chainA.length; i++) {
-//        const blockA = chainA[i]
-//        for (; j < chainB.length; j++) {
-//            let blockB = chainB[j]
-//            if (blockB.compare(blockA).isGreater) break
-//            if (blockB.compare(blockA).isFork) return i - 1
-//        }
-//        if (j === chainB.length) break
-//    }
-//    return i - 1
-//}
 
 //function validateContinuity<TData extends Data>(offset: TData['id'] | undefined, batch: DataBatch<TData>) {
 //    let last = offset
