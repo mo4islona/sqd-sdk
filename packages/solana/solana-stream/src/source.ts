@@ -1,5 +1,5 @@
 import {applyRangeBound, mergeRangeRequests} from '@sqd-sdk/core/internal/range/index'
-import {type DataBatch, type Data, DataSource, DataReader} from '@sqd-sdk/core/pipeline'
+import type {DataBatch, Data, DataSourceConfig} from '@sqd-sdk/core/pipeline'
 import {cast} from '@sqd-sdk/core/validation'
 import {
     type Block,
@@ -32,7 +32,7 @@ export type SolanaPortalData<Q extends SolanaQueryOptions> = Data<Block<GetField
 
 export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
     options: SolanaPortalDataReaderOptions<Q>
-): DataSource<SolanaPortalData<Q>, true> {
+): () => Promise<DataSourceConfig<SolanaPortalData<Q>, true>> {
     const fields = getFields(options.query.fields)
     const requests = mergeRangeRequests(options.query.requests, mergeDataRequests)
 
@@ -59,7 +59,7 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
         }
     }
 
-    return new DataSource({
+    return async () => ({
         unfinalized: true,
         ref: BlockId,
         reader: async (opts) => createDataStream(opts.offset),

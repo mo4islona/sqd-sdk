@@ -34,42 +34,7 @@ export namespace DataReader {
     }
 }
 
-export interface Pipeline<TData extends Data, TUnfinalized extends boolean> {
-    pipeThrough<UData extends Data, UUnfinalized extends boolean>(
-        duplex: PipableThrough<TData, UData, TUnfinalized extends true ? true : boolean, UUnfinalized>
-    ): Pipeline<UData, UUnfinalized>
-    pipeTo(target: PipableTo<TData, TUnfinalized extends true ? true : boolean>): Promise<void>
-}
 
-export function pipeline<TData extends Data, TUnfinalized extends boolean>(
-    source: DataSource<TData, TUnfinalized>
-): Pipeline<TData, TUnfinalized> {
-    return {
-        pipeThrough: (duplex) => {
-            if (typeof duplex === 'function') {
-                duplex = duplex({
-                    unfinalized: source.unfinalized as any, // FIXME: how to type this?
-                    ref: source.ref,
-                })
-            }
-
-            pipe(source, duplex.target).catch((err) => {
-                throw err
-            })
-
-            return pipeline(duplex.source)
-        },
-        pipeTo: (target) => {
-            if (typeof target === 'function') {
-                target = target({
-                    unfinalized: source.unfinalized as any, // FIXME: how to type this?
-                    ref: source.ref,
-                })
-            }
-            return pipe(source, target)
-        },
-    }
-}
 
 export interface DataStream<TData extends Data> extends AsyncIterableIterator<DataBatch<TData>> {}
 

@@ -11,6 +11,7 @@ import {
     DataSource,
     DataTargetFactory,
     pipeline,
+    DataFactoryOptions,
 } from '@sqd-sdk/core/pipeline'
 import {BlockId, PortalClient} from '@sqd-sdk/core/portal'
 import {type SolanaPortalData, solanaPortalDataSource} from '@sqd-sdk/solana-stream'
@@ -24,8 +25,9 @@ async function main() {
         minBytes: 100 * 1024 * 1024,
     })
 
-    let toBlock = await portal.getHead().then((h) => h?.number ?? 0)
-    let fromBlock = toBlock - 50_000
+    let head = await portal.getHead().then((h) => h?.number ?? 0)
+    let fromBlock = head - 50_000
+    let toBlock = undefined
 
     console.log(`processing range: [${fromBlock}, ${toBlock ?? null}]`)
 
@@ -64,28 +66,39 @@ async function main() {
                 ],
             },
         })
-    )
-        .pipeThrough(createProgressTracker('a'))
-        .pipeThrough(createProgressTracker('b'))
-        .pipeTo(
-            (opts) =>
-                new DataTarget({
-                    unfinalized: true,
-                    ref: opts.ref,
-                    writer: async () => {
-                        return {
-                            next: async (batch) => {
-                                let temp = last
-                                last = batch?.offset
-                                return {done: false, value: temp}
-                            },
-                            fork: async (fork) => {
-                                return {done: false, value: fork.heads[fork.heads.length - 1]}
-                            },
+    ).pipeTo(async (opts) => ({
+        unfinalized: true,
+        ref: opts.ref,
+        writer: async () => {
+            const logger = createLogger('sqd')
+            return {
+                next: async (batch) => {
+                    if (batch) {
+                        const {offset, head, finalizedHead, data} = batch
+                        logger.info(
+                            [
+                                `progress: ${offset.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
+                                `blocks: ${batch.data.length}, lag: ${(
+                                    (Date.now() - data[data.length - 1].value.header.timestamp * 1000) /
+                                    1000
+                                ).toFixed(2)}s`,
+                            ].join(', ')
+                        )
+
+                        if (opts.ref.compare(batch.offset, batch.head).isEqual) {
+                            return {done: true, value: undefined}
                         }
-                    },
-                })
-        )
+                    }
+
+                    return {done: false, value: batch?.offset}
+                },
+                fork: async (fork) => {
+                    logger.info(`fork: ${fork.heads.length}`)
+                    return {done: true, value: undefined}
+                },
+            }
+        },
+    }))
 
     console.log('end')
 }
@@ -136,36 +149,36 @@ interface StateManager<T extends Data<any, any>> {
 //         })
 // }
 
-function createProgressTracker<
-    T extends Data<{header: {timestamp: number}}, {number: number}>,
-    TFinalized extends boolean
->(prefix: string): DataDuplexFactory<T, T, TFinalized, TFinalized> {
-    const logger = createLogger(`sqd:${prefix}`)
-
-    return transformer({
-        transformer: async (opts) => {
-            return {
-                offset: opts.offset,
-                ref: opts.ref,
-                transform: async (batch) => {
-                    if (batch.data.length > 0) {
-                        const {offset, head, finalizedHead, data} = batch
-                        logger.info(
-                            [
-                                `progress: ${offset.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
-                                `blocks: ${batch.data.length}, lag: ${(
-                                    (Date.now() - data[data.length - 1].value.header.timestamp * 1000) /
-                                    1000
-                                ).toFixed(2)}s`,
-                            ].join(', ')
-                        )
-                    }
-                    return batch
-                },
-                fork: async (fork) => fork,
-            }
-        },
-    })
-}
+//function createProgressTracker<
+//    T extends Data<{header: {timestamp: number}}, {number: number}>,
+//    TFinalized extends boolean
+//>(prefix: string): (opts: DataFactoryOptions<T, TFinalized>) => Promise<DataDuplex<T, T, TFinalized, TFinalized>> {
+//    const logger = createLogger(`sqd:${prefix}`)
+//
+//    return transformer({
+//        transformer: async (opts) => {
+//            return {
+//                offset: opts.offset,
+//                ref: opts.ref,
+//                transform: async (batch) => {
+//                    if (batch.data.length > 0) {
+//                        const {offset, head, finalizedHead, data} = batch
+//                        logger.info(
+//                            [
+//                                `progress: ${offset.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
+//                                `blocks: ${batch.data.length}, lag: ${(
+//                                    (Date.now() - data[data.length - 1].value.header.timestamp * 1000) /
+//                                    1000
+//                                ).toFixed(2)}s`,
+//                            ].join(', ')
+//                        )
+//                    }
+//                    return batch
+//                },
+//                fork: async (fork) => fork,
+//            }
+//        },
+//    })
+//}
 
 main()
