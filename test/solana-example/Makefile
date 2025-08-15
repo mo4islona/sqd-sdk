@@ -1,5 +1,5 @@
 process:
-	@npx node -r dotenv/config lib/main.js
+	@npx node -r dotenv/config --unhandled-rejections=strict lib/main.js
 
 
 migrate:

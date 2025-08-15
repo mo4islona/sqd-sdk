@@ -1,20 +1,8 @@
 import {HttpClient} from '@sqd-sdk/core/http-client'
 import {createLogger} from '@sqd-sdk/core/logger'
-import {
-    type Data,
-    type DataBatch,
-    type DataRef,
-    DataTarget,
-    transformer,
-    type DataDuplexFactory,
-    type DataDuplex,
-    DataSource,
-    DataTargetFactory,
-    pipeline,
-    DataFactoryOptions,
-} from '@sqd-sdk/core/pipeline'
-import {BlockId, PortalClient} from '@sqd-sdk/core/portal'
-import {type SolanaPortalData, solanaPortalDataSource} from '@sqd-sdk/solana-stream'
+import {type Data, pipeline, target} from '@sqd-sdk/core/pipeline'
+import {PortalClient} from '@sqd-sdk/core/portal'
+import {solanaPortalDataSource} from '@sqd-sdk/solana-stream'
 
 async function main() {
     let portal = new PortalClient({
@@ -26,12 +14,10 @@ async function main() {
     })
 
     let head = await portal.getHead().then((h) => h?.number ?? 0)
-    let fromBlock = head - 50_000
+    let fromBlock = head - 10_000
     let toBlock = undefined
 
     console.log(`processing range: [${fromBlock}, ${toBlock ?? null}]`)
-
-    let last: any = undefined
 
     await pipeline(
         solanaPortalDataSource({
@@ -66,39 +52,41 @@ async function main() {
                 ],
             },
         })
-    ).pipeTo(async (opts) => ({
-        unfinalized: true,
-        ref: opts.ref,
-        writer: async () => {
-            const logger = createLogger('sqd')
-            return {
-                next: async (batch) => {
-                    if (batch) {
-                        const {offset, head, finalizedHead, data} = batch
-                        logger.info(
-                            [
-                                `progress: ${offset.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
-                                `blocks: ${batch.data.length}, lag: ${(
-                                    (Date.now() - data[data.length - 1].value.header.timestamp * 1000) /
-                                    1000
-                                ).toFixed(2)}s`,
-                            ].join(', ')
-                        )
+    ).pipeTo(
+        target((opts) => ({
+            unfinalized: true,
+            ref: opts.ref,
+            writer: () => {
+                const logger = createLogger('sqd')
+                return {
+                    next: async (batch) => {
+                        if (batch) {
+                            const {offset, head, finalizedHead, data} = batch
+                            logger.info(
+                                [
+                                    `progress: ${offset.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
+                                    `blocks: ${batch.data.length}, lag: ${(
+                                        (Date.now() - data[data.length - 1].value.header.timestamp * 1000) /
+                                        1000
+                                    ).toFixed(2)}s`,
+                                ].join(', ')
+                            )
 
-                        if (opts.ref.compare(batch.offset, batch.head).isEqual) {
-                            return {done: true, value: undefined}
+                            if (opts.ref.compare(batch.offset, batch.head).isEqual) {
+                                return {done: true, value: undefined}
+                            }
                         }
-                    }
 
-                    return {done: false, value: batch?.offset}
-                },
-                fork: async (fork) => {
-                    logger.info(`fork: ${fork.heads.length}`)
-                    return {done: true, value: undefined}
-                },
-            }
-        },
-    }))
+                        return {done: false, value: batch?.offset}
+                    },
+                    fork: async (fork) => {
+                        logger.info(`fork: ${fork.heads.length}`)
+                        return {done: true, value: undefined}
+                    },
+                }
+            },
+        }))
+    )
 
     console.log('end')
 }

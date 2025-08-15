@@ -1,49 +1,46 @@
 import {createFuture} from '../internal/async'
+import type {Awaitable} from '../internal/types'
 import type {
+    DataDuplex,
     DataFactoryOptions,
     DataReader,
     DataReaderOptions,
-    DataSourceConfig,
+    DataSource,
     DataStream,
-    DataTargetConfig,
+    DataTarget,
 } from './core'
-import type {Data, DataBatch} from './data'
+import type {Data, DataBatch, DataRef} from './data'
 import {isForkException} from './errors'
 
 export interface Pipeline<TData extends Data, TUnfinalized extends boolean> {
     pipeThrough<UData extends Data, UUnfinalized extends boolean>(
-        duplex: (opts: DataFactoryOptions<TData, TUnfinalized>) => Promise<{
-            target: DataTargetConfig<TData, TUnfinalized extends true ? true : boolean>
-            source: DataSourceConfig<UData, UUnfinalized>
-        }>
+        duplexFactory: (
+            opts: DataFactoryOptions<TData, TUnfinalized>
+        ) => Awaitable<DataDuplex<TData, UData, TUnfinalized extends true ? true : boolean, UUnfinalized>>
     ): Pipeline<UData, UUnfinalized>
     pipeTo(
-        target: (
+        targetFactory: (
             opts: DataFactoryOptions<TData, TUnfinalized>
-        ) => Promise<DataTargetConfig<TData, TUnfinalized extends true ? true : boolean>>
+        ) => Awaitable<DataTarget<TData, TUnfinalized extends true ? true : boolean>>
     ): Promise<void>
     [Symbol.asyncIterator](): AsyncIterableIterator<DataBatch<TData>>
 }
 
 export function pipeline<TData extends Data, TUnfinalized extends boolean>(
-    sourceFactory: () => Promise<DataSourceConfig<TData, TUnfinalized>>
+    sourceFactory: () => Awaitable<DataSource<TData, TUnfinalized>>
 ): Pipeline<TData, TUnfinalized> {
     return {
         pipeThrough: (duplexFactory) => {
             const duplexFuture = createFuture<Awaited<ReturnType<typeof duplexFactory>>>()
 
-            pipe(sourceFactory, (opts) =>
-                duplexFactory(opts).then(
-                    (duplex) => {
-                        duplexFuture.resolve(duplex)
-                        return duplex.target
-                    },
-                    (err) => {
-                        duplexFuture.reject(err)
-                        throw err
-                    }
-                )
-            )
+            pipe(sourceFactory, async (opts) => {
+                const duplex = await duplexFactory(opts)
+                duplexFuture.resolve(duplex)
+                return duplex.target
+            }).catch((err) => {
+                duplexFuture.reject(err)
+                throw err
+            })
 
             return pipeline(async () => duplexFuture.promise().then((duplex) => duplex.source))
         },
@@ -56,7 +53,7 @@ export function pipeline<TData extends Data, TUnfinalized extends boolean>(
                 next: async () => {
                     if (!stream) {
                         const source = await sourceFactory()
-                        stream = read(source, {offset})
+                        stream = source[Symbol.asyncIterator]({offset})
                     }
                     return stream.next()
                 },
@@ -77,10 +74,10 @@ export function pipeline<TData extends Data, TUnfinalized extends boolean>(
 }
 
 async function pipe<TData extends Data, TUnfinalized extends boolean>(
-    sourceFactory: () => Promise<DataSourceConfig<TData, TUnfinalized>>,
+    sourceFactory: () => Awaitable<DataSource<TData, TUnfinalized>>,
     targetFactory: (
         opts: DataFactoryOptions<TData, TUnfinalized>
-    ) => Promise<DataTargetConfig<TData, TUnfinalized extends true ? true : boolean>>
+    ) => Awaitable<DataTarget<TData, TUnfinalized extends true ? true : boolean>>
 ): Promise<void> {
     const source = await sourceFactory()
     const target = await targetFactory({
@@ -95,12 +92,12 @@ async function pipe<TData extends Data, TUnfinalized extends boolean>(
     const writer = await target.writer({})
 
     const processData = async (offset: TData['id'] | undefined): Promise<unknown> => {
-        const stream = read(source, {offset})
+        const stream = await source.reader({offset})
         return processStream(stream, offset)
     }
 
     const processStream = async (
-        stream: DataStream<TData>,
+        stream: AsyncIterator<DataBatch<TData>>,
         currentOffset: TData['id'] | undefined
     ): Promise<unknown> => {
         let batch: DataBatch<TData> | undefined
@@ -113,19 +110,28 @@ async function pipe<TData extends Data, TUnfinalized extends boolean>(
                 throw err
             }
             if (!source.unfinalized) {
-                throw new TypeError('Got fork exception in finalized DataTarget')
+                throw new TypeError('Got fork exception from finalized DataSource')
+            }
+            if (!target.unfinalized) {
+                throw new TypeError('Got fork exception for finalized DataTarget')
             }
             if (!writer.fork) {
                 throw new TypeError('Missing fork method in unfinalized DataWriter')
             }
 
-            const {value, done} = await writer.fork(err.fork)
+            const {value, done} = await writer.fork(err.fork, currentOffset)
             if (done) return value
+
             return processData(value)
         }
 
-        const {value, done} = await writer.next(batch)
-        if (done) return value
+        const {value, done} = await writer.next(batch, currentOffset)
+        if (done) {
+            await stream.return?.()
+            return value
+        }
+
+        validateBatch(source.ref, currentOffset, batch)
 
         // NOTE: If the offset is not the same as the batch offset,
         // it means that the batch was not fully consumed or we want to skip
@@ -139,44 +145,37 @@ async function pipe<TData extends Data, TUnfinalized extends boolean>(
         return processStream(stream, batch.offset)
     }
 
-    const {value, done} = await writer.next()
+    const {value, done} = await writer.next(undefined, undefined)
     if (done) return
 
     await processData(value)
 }
 
-function read<TData extends Data, TUnfinalized extends boolean>(
-    source: DataSourceConfig<TData, TUnfinalized>,
-    opts: DataReaderOptions<TData>
-): DataStream<TData> {
-    let reader: DataReader<TData> | undefined
+function validateBatch<TData extends Data>(
+    ref: DataRef<TData['id']>,
+    offset: TData['id'] | undefined,
+    batch: DataBatch<TData>
+) {
+    if (offset && ref.compare(batch.offset, offset).isLess) {
+        throw new Error('New offset is below the previous offset')
+    }
 
-    return {
-        next: async (): Promise<IteratorResult<DataBatch<TData>>> => {
-            if (!reader) {
-                reader = await source.reader(opts)
-            }
+    for (const item of batch.data) {
+        if (offset && ref.compare(item.id, offset).isLessOrEqual) {
+            throw new Error('Item is below or equal to the previous item')
+        }
+        offset = item.id
+    }
 
-            try {
-                return await reader.next()
-            } catch (err) {
-                if (!isForkException<TData>(err)) throw err
-                if (!source.unfinalized) {
-                    throw new TypeError('Got fork exception in finalized DataSource')
-                }
-                throw err
-            }
-        },
-        return: async (): Promise<IteratorResult<DataBatch<TData>>> => {
-            const result = await reader?.return?.()
-            return result ? result : {done: true, value: undefined}
-        },
-        throw: async (err: any) => {
-            await reader?.return?.().catch(() => {})
-            throw err
-        },
-        [Symbol.asyncIterator]() {
-            return this
-        },
+    if (offset && ref.compare(batch.head, offset).isLess) {
+        throw new Error('Head is below the data')
+    }
+
+    if (batch.finalizedHead && ref.compare(batch.head, batch.finalizedHead).isLess) {
+        throw new Error('Head is below the finalized head')
+    }
+
+    if (ref.compare(batch.head, batch.offset).isLess) {
+        throw new Error('Head is below the offset')
     }
 }

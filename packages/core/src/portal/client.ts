@@ -550,7 +550,7 @@ export class ForkException extends Error {
     }
 }
 
-export function isForkException(err: unknown): err is ForkException {
+export function isForkException(err: unknown): err is Simplify<ForkException> {
     if (err instanceof ForkException) return true
     if (err instanceof Error && err.name === 'ForkError') return true
     return false

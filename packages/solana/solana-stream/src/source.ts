@@ -1,5 +1,5 @@
 import {applyRangeBound, mergeRangeRequests} from '@sqd-sdk/core/internal/range/index'
-import type {DataBatch, Data, DataSourceConfig} from '@sqd-sdk/core/pipeline'
+import {type DataBatch, type Data, type DataSource, source, pipeline} from '@sqd-sdk/core/pipeline'
 import {cast} from '@sqd-sdk/core/validation'
 import {
     type Block,
@@ -32,7 +32,7 @@ export type SolanaPortalData<Q extends SolanaQueryOptions> = Data<Block<GetField
 
 export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
     options: SolanaPortalDataReaderOptions<Q>
-): () => Promise<DataSourceConfig<SolanaPortalData<Q>, true>> {
+): () => DataSource<SolanaPortalData<Q>, true> {
     const fields = getFields(options.query.fields)
     const requests = mergeRangeRequests(options.query.requests, mergeDataRequests)
 
@@ -42,16 +42,18 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
         const requestsBounded = offset ? applyRangeBound(requests, {from: offset.number + 1}) : requests
 
         for (const request of requestsBounded) {
-            for await (const data of portalDataSource({
-                portal: options.portal,
-                query: {
-                    type: 'solana' as const,
-                    fromBlock: request.range.from,
-                    toBlock: request.range.to,
-                    fields,
-                    ...request.request,
-                },
-            }).read({offset})) {
+            for await (const data of pipeline(
+                portalDataSource({
+                    portal: options.portal,
+                    query: {
+                        type: 'solana' as const,
+                        fromBlock: request.range.from,
+                        toBlock: request.range.to,
+                        fields,
+                        ...request.request,
+                    },
+                })
+            )) {
                 yield data as DataBatch<SolanaPortalData<Q>>
             }
 
@@ -59,11 +61,11 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
         }
     }
 
-    return async () => ({
+    return source(() => ({
         unfinalized: true,
         ref: BlockId,
-        reader: async (opts) => createDataStream(opts.offset),
-    })
+        reader: (opts) => createDataStream(opts.offset),
+    }))
 }
 
 export function mapBlock<F extends RequiredFieldSelection>(
