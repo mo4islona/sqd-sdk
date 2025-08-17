@@ -4,6 +4,7 @@ import type {Awaitable, Maybe} from '../internal/types'
 
 export interface DataReaderOptions<TData extends Data> {
     offset: Maybe<TData['id']>
+    request?: TData['request']
 }
 
 export interface DataReader<TData extends Data> extends AsyncIterator<DataBatch<TData>> {}
@@ -57,14 +58,22 @@ export interface DataWriterContext<TData extends Data> {
     offset: Maybe<TData['id']>
 }
 
+export interface WriterOperationResult<TData extends Data, TRequest = unknown> {
+    offset: Maybe<TData['id']>
+    request?: TRequest
+}
+
 export interface FinalizedDataWriter<TData extends Data, TReturn = unknown> {
     offset: Maybe<TData['id']>
-    next(batch: DataBatch<TData>, ctx: DataWriterContext<TData>): Promise<IteratorResult<Maybe<TData['id']>, TReturn>>
+    next(
+        batch: DataBatch<TData>,
+        ctx: DataWriterContext<TData>
+    ): Promise<IteratorResult<WriterOperationResult<TData>, TReturn>>
     return?(): Promise<IteratorReturnResult<TReturn>>
     fork?(
         fork: DataFork<TData['id']>,
         ctx: DataWriterContext<TData>
-    ): Promise<IteratorResult<Maybe<TData['id']>, TReturn>>
+    ): Promise<IteratorResult<WriterOperationResult<TData>, TReturn>>
     throw?(err: any): Promise<void>
 }
 
@@ -73,16 +82,16 @@ export interface UnfinalizedDataWriter<TData extends Data, TReturn = unknown>
     fork(
         fork: DataFork<TData['id']>,
         ctx: DataWriterContext<TData>
-    ): Promise<IteratorResult<TData['id'] | undefined, TReturn>>
+    ): Promise<IteratorResult<WriterOperationResult<TData>, TReturn>>
 }
 
-export type DataWriter<TData extends Data, TUnfinalized extends boolean> = TUnfinalized extends true
-    ? UnfinalizedDataWriter<TData>
-    : FinalizedDataWriter<TData>
+export type DataWriter<TData extends Data, TUnfinalized extends boolean, TResult = unknown> = TUnfinalized extends true
+    ? UnfinalizedDataWriter<TData, TResult>
+    : FinalizedDataWriter<TData, TResult>
 
-export interface DataTarget<TData extends Data, TUnfinalized extends boolean> {
+export interface DataTarget<TData extends Data, TUnfinalized extends boolean, TResult = unknown> {
     unfinalized: TUnfinalized
-    writer: (opts: DataWriterOptions<TData>) => Awaitable<DataWriter<TData, NoInfer<TUnfinalized>>>
+    writer: (opts: DataWriterOptions<TData>) => Awaitable<DataWriter<TData, NoInfer<TUnfinalized>, TResult>>
 }
 
 export function createTarget<TData extends Data, TUnfinalized extends boolean>(
@@ -128,12 +137,12 @@ export interface Pipeline<TData extends Data, TUnfinalized extends boolean> {
         ) => Awaitable<DataDuplex<TData, UData, TUnfinalized extends true ? true : boolean, UUnfinalized>>,
         opts?: DataPipeOptions
     ): Pipeline<UData, UUnfinalized>
-    pipeTo(
+    pipeTo<TResult>(
         targetFactory: (
             opts: DataFactoryOptions<TData, TUnfinalized>
-        ) => Awaitable<DataTarget<TData, TUnfinalized extends true ? true : boolean>>,
+        ) => Awaitable<DataTarget<TData, TUnfinalized extends true ? true : boolean, TResult>>,
         opts?: DataPipeOptions
-    ): Promise<void>
+    ): Promise<TResult>
     [Symbol.asyncIterator](): AsyncIterableIterator<DataBatch<TData>>
 }
 
@@ -219,29 +228,39 @@ export function pipeline<TData extends Data, TUnfinalized extends boolean>(
     }
 }
 
-async function pipe<TData extends Data, TUnfinalized extends boolean>(
+async function pipe<TData extends Data, TUnfinalized extends boolean, TResult>(
     source: DataSource<TData, TUnfinalized>,
-    target: DataTarget<TData, TUnfinalized extends true ? true : boolean>,
+    target: DataTarget<TData, TUnfinalized extends true ? true : boolean, TResult>,
     opts: DataPipeOptions = {validateBatches: true}
-): Promise<void> {
+): Promise<TResult> {
     if (source.unfinalized && !target.unfinalized) {
         throw new TypeError('Cannot pipe from unfinalized DataSource to finalized DataTarget')
     }
 
-    const processData = async (writer: DataWriter<TData, boolean>, ctx: DataWriterContext<TData>): Promise<unknown> => {
-        const reader = await source.reader({offset: ctx.offset ?? writer.offset})
-        return processStream(reader, writer, ctx)
+    const processData = async (
+        writer: DataWriter<TData, boolean>,
+        opts: DataReaderOptions<TData>
+    ): Promise<TResult> => {
+        const reader = await source.reader(opts)
+        return processStream(reader, writer, opts)
     }
 
     const processStream = async (
         reader: DataReader<TData>,
         writer: DataWriter<TData, boolean>,
         ctx: DataWriterContext<TData>
-    ): Promise<unknown> => {
+    ): Promise<TResult> => {
         let batch: DataBatch<TData> | undefined
         try {
             const {done, value} = await reader.next()
-            if (done) return writer.return?.()
+            if (done) {
+                const result = await writer.return?.()
+                if (result && !result.done) {
+                    throw new Error('Writer returned a non-done result in return')
+                }
+                // FIXME: how to type this?
+                return result?.value as TResult
+            }
             batch = value
         } catch (err) {
             if (!isForkException<TData>(err)) {
@@ -258,7 +277,8 @@ async function pipe<TData extends Data, TUnfinalized extends boolean>(
             }
 
             const {value, done} = await writer.fork(err.fork, ctx)
-            if (done) return value
+            // FIXME: how to type this?
+            if (done) return value as TResult
 
             return processData(writer, {offset: value})
         }
@@ -266,7 +286,7 @@ async function pipe<TData extends Data, TUnfinalized extends boolean>(
         const {value, done} = await writer.next(batch, ctx)
         if (done) {
             await reader.return?.()
-            return value
+            return value as TResult
         }
 
         if (opts.validateBatches) {
@@ -303,15 +323,18 @@ async function pipe<TData extends Data, TUnfinalized extends boolean>(
         // it means that the batch was not fully consumed or we want to skip
         // so we break the current stream and start from the new offset
         // FIXME: Do we want this behavior?
-        if (!value || !source.ref.compare(value, batch.offset).isEqual) {
+        if (!value.offset || !source.ref.compare(value.offset, batch.offset).isEqual || value.request) {
             // FIXME: looks like a hack, revisit this
             await reader.return?.()
-            return processData(writer, {offset: value})
+            return processData(writer, {
+                offset: value.offset,
+                request: value.request,
+            })
         }
 
         return processStream(reader, writer, {offset: batch.offset})
     }
 
     const writer = await target.writer({})
-    await processData(writer, {offset: undefined})
+    return await processData(writer, {offset: undefined})
 }

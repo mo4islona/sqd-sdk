@@ -74,7 +74,7 @@ async function main() {
                                 return {done: true, value: undefined}
                             }
 
-                            return {done: false, value: batch.offset}
+                            return {done: false, value: {offset: batch.offset}}
                         },
                         fork: async (fork) => {
                             return {done: true, value: undefined}

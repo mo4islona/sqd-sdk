@@ -67,7 +67,7 @@ export async function createTransformer<
                     const outputBatch = await transformer.transform(batch, ctx)
                     await queue.put(outputBatch)
 
-                    return {done: false, value: outputBatch.offset}
+                    return {done: false, value: {offset: outputBatch.offset}}
                 },
                 return: async () => {
                     console.log(`transformer writer ${num} is closed by return`)
