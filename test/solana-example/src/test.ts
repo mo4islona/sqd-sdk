@@ -1,25 +1,25 @@
 async function main() {
-    try {
-        for await (const i of {
-            [Symbol.asyncIterator]() {
-                return {
-                    next: async (): Promise<{done: boolean; value: number}> => {
-                        throw new Error('test')
-                    },
-                    return: async (): Promise<{value: undefined; done: true}> => {
-                        console.log('return')
-                        return {value: undefined, done: true}
-                    },
+    const generator = async function* () {
+        yield 1
+        yield 2
+        yield 3
+        throw new Error('test')
+    }
+
+    const stream = generator()
+
+    while (true) {
+        await stream.next().then(
+            (r) => {
+                console.log('next', r)
+                if (r.done) {
+                    process.exit(0)
                 }
             },
-        }) {
-        }
-    } catch (err) {
-        console.log(err)
-
-        while (true) {
-            await new Promise((resolve) => setTimeout(resolve, 1000))
-        }
+            (err) => {
+                console.log('err', err)
+            }
+        )
     }
 }
 

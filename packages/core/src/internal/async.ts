@@ -176,9 +176,7 @@ export class SyncQueue<T> {
     }
 
     async put(value: T): Promise<void> {
-        if (this.isClosed) {
-            throw new ClosedQueueError()
-        }
+        if (this.isClosed) return
 
         const pendingTake = this.pendingTakes.shift()
         if (pendingTake) {
@@ -186,9 +184,9 @@ export class SyncQueue<T> {
             return
         }
 
-        return new Promise<void>((resolve, reject) => {
+        return new Promise<void>((resolve) => {
             if (this.isClosed) {
-                reject(new ClosedQueueError())
+                resolve(undefined)
                 return
             }
             this.pendingPuts.push({value, resolve})
@@ -196,14 +194,14 @@ export class SyncQueue<T> {
     }
 
     async take(): Promise<T | undefined> {
+        if (this.isClosed) {
+            return undefined
+        }
+
         const pendingPut = this.pendingPuts.shift()
         if (pendingPut) {
             pendingPut.resolve()
             return pendingPut.value
-        }
-
-        if (this.isClosed) {
-            return undefined
         }
 
         return new Promise<T | undefined>((resolve) => {
@@ -236,7 +234,7 @@ export class SyncQueue<T> {
 export async function* concurrentMap<T, R>(
     concurrency: number,
     stream: AsyncIterable<T>,
-    f: (val: T) => Promise<R>,
+    f: (val: T) => Promise<R>
 ): AsyncIterable<R> {
     let queue = new AsyncQueue<{promise: Promise<R>}>(concurrency)
 
@@ -254,7 +252,7 @@ export async function* concurrentMap<T, R>(
             let promise = Promise.reject(err)
             promise.catch(() => {}) // prevent unhandled rejection crashes
             queue.tryPut({promise})
-        },
+        }
     )
 
     for await (let item of queue.iterate()) {
@@ -264,7 +262,7 @@ export async function* concurrentMap<T, R>(
 
 export async function* concurrentWriter<T>(
     watermark: number,
-    cb: (write: (val: T) => Promise<void>) => Promise<void>,
+    cb: (write: (val: T) => Promise<void>) => Promise<void>
 ): AsyncIterable<T> {
     assert(watermark >= 1)
 
@@ -276,7 +274,7 @@ export async function* concurrentWriter<T>(
             if (!queue.isClosed()) {
                 queue.forcePut(ensureError(err))
             }
-        },
+        }
     )
 
     for await (let valueOrError of queue.iterate()) {

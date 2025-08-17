@@ -49,10 +49,6 @@ export type Data<TValue = unknown, TId = unknown> = {
     id: TId
 }
 
-export namespace Data {
-    export const Referenceable = Symbol.for('Data.Referenceable')
-}
-
 export type DataId<TData extends Data> = TData['id']
 
 export interface DataBatch<TData extends Data> {

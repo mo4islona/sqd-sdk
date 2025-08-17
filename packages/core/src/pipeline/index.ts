@@ -1,5 +1,4 @@
 export * from './errors'
 export * from './data'
 export * from './core'
-export * from './core2'
 export * from './tools'

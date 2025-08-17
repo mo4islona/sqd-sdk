@@ -11,3 +11,5 @@ export type ConditionalKeys<T, V> = {
 export type ConditionalPick<T, V> = Simplify<Pick<T, ConditionalKeys<T, V>>>
 
 export type ConditionalOmit<T, V> = Simplify<Omit<T, ConditionalKeys<T, V>>>
+
+export type Maybe<T> = T | undefined

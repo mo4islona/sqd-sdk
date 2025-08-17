@@ -1,5 +1,5 @@
 import {applyRangeBound, mergeRangeRequests} from '@sqd-sdk/core/internal/range/index'
-import {type DataBatch, type Data, type DataSource, source, pipeline} from '@sqd-sdk/core/pipeline'
+import {type DataBatch, type Data, type DataSource, createSource, pipeline} from '@sqd-sdk/core/pipeline'
 import {cast} from '@sqd-sdk/core/validation'
 import {
     type Block,
@@ -32,7 +32,7 @@ export type SolanaPortalData<Q extends SolanaQueryOptions> = Data<Block<GetField
 
 export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
     options: SolanaPortalDataReaderOptions<Q>
-): () => DataSource<SolanaPortalData<Q>, true> {
+): DataSource<SolanaPortalData<Q>, true> {
     const fields = getFields(options.query.fields)
     const requests = mergeRangeRequests(options.query.requests, mergeDataRequests)
 
@@ -42,7 +42,7 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
         const requestsBounded = offset ? applyRangeBound(requests, {from: offset.number + 1}) : requests
 
         for (const request of requestsBounded) {
-            for await (const data of pipeline(
+            for await (const data of pipeline(() =>
                 portalDataSource({
                     portal: options.portal,
                     query: {
@@ -56,16 +56,14 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
             )) {
                 yield data as DataBatch<SolanaPortalData<Q>>
             }
-
-            return
         }
     }
 
-    return source(() => ({
+    return createSource({
         unfinalized: true,
         ref: BlockId,
         reader: (opts) => createDataStream(opts.offset),
-    }))
+    })
 }
 
 export function mapBlock<F extends RequiredFieldSelection>(

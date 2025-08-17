@@ -24,28 +24,34 @@ export function createQuery<Q extends Query>(query: Q): Simplify<Q & Query> {
     }
 }
 
-const BLOCK_SCHEMAS = new WeakMap<Query, Validator<any, any>>()
+const BLOCK_SCHEMAS = new WeakMap<object, Map<string, Validator<any, any>>>()
 
 export function getBlockSchema<Q extends Query>(query: Q): Validator<GetBlock<Q>, any> {
-    let schema = BLOCK_SCHEMAS.get(query)
-    if (schema) return schema
-
-    const type = query.type
-    switch (type) {
-        case 'solana':
-            schema = solana.getBlockSchema(query.fields)
-            break
-        case 'evm':
-            schema = evm.getBlockSchema(query.fields)
-            break
-        case 'substrate':
-            schema = substrate.getBlockSchema(query.fields)
-            break
-        default:
-            throw unexpectedCase(type)
+    let fieldsSchema = BLOCK_SCHEMAS.get(query.fields)
+    if (!fieldsSchema) {
+        fieldsSchema = new Map()
+        BLOCK_SCHEMAS.set(query.fields, fieldsSchema)
     }
 
-    BLOCK_SCHEMAS.set(query, schema)
+    let schema = fieldsSchema.get(query.type)
+    if (!schema) {
+        const type = query.type
+        switch (type) {
+            case 'solana':
+                schema = solana.getBlockSchema(query.fields)
+                break
+            case 'evm':
+                schema = evm.getBlockSchema(query.fields)
+                break
+            case 'substrate':
+                schema = substrate.getBlockSchema(query.fields)
+                break
+            default:
+                throw unexpectedCase(type)
+        }
+
+        fieldsSchema.set(type, schema)
+    }
 
     return schema
 }
