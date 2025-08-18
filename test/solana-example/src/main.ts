@@ -19,7 +19,7 @@ async function main() {
     })
 
     let head = await portal.getHead().then((h) => h?.number ?? 0)
-    let fromBlock = head - 10_000
+    let fromBlock = head - 100_000
     let toBlock = undefined
 
     console.log(`processing range: [${fromBlock}, ${toBlock ?? null}]`)
