@@ -253,7 +253,10 @@ async function pipe<TData extends Data, TUnfinalized extends boolean, TResult>(
         writer: DataWriter<TData, boolean>,
         opts: DataReaderOptions<TData>,
     ): Promise<TResult> => {
-        const reader = await source.reader(opts)
+        const reader = await source.reader({
+            offset: opts.offset ?? writer.offset,
+            request: opts.request ?? writer.request,
+        })
         return processStream(reader, writer, opts)
     }
 
