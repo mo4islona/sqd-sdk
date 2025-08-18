@@ -8,7 +8,7 @@ import {ChangeTracker, rollbackBlock} from './utils/hot'
 import type {DatabaseState, FinalTxInfo, HashAndHeight, HotTxInfo} from './interfaces'
 import {def} from '@sqd-sdk/core/internal/def'
 import {EntityLiteral} from './utils/misc'
-import {createTarget, type Data, type DataBatch} from '@sqd-sdk/core/pipeline'
+import {createTarget, type DataFork, type Data, type DataBatch} from '@sqd-sdk/core/pipeline'
 
 export type IsolationLevel = 'SERIALIZABLE' | 'READ COMMITTED' | 'REPEATABLE READ'
 
@@ -131,70 +131,35 @@ export class TypeormDatabase {
         return assertStateInvariants({...status[0], top})
     }
 
-    transact(info: FinalTxInfo, cb: (store: Store) => Promise<void>): Promise<void> {
-        return this.submit(async (em) => {
-            let state = await this.getState(em)
-            let {prevHead: prev, nextHead: next} = info
-
-            assert(state.hash === info.prevHead.hash, RACE_MSG)
-            assert(state.number === prev.number)
-            assert(prev.number < next.number)
-            assert(prev.hash !== next.hash)
-
-            for (let i = state.top.length - 1; i >= 0; i--) {
-                let block = state.top[i]
-                await rollbackBlock(this.statusSchema, em, block.number)
-            }
-
-            await this.performUpdates(cb, em)
-
-            await this.updateStatus(em, state.nonce, next)
-        })
-    }
-
-    transactHot(info: HotTxInfo, cb: (store: Store, block: HashAndHeight) => Promise<void>): Promise<void> {
-        return this.transactHot2(info, async (store, sliceBeg, sliceEnd) => {
-            for (let i = sliceBeg; i < sliceEnd; i++) {
-                await cb(store, info.newBlocks[i])
-            }
-        })
-    }
-
-    transactHot2(
-        info: HotTxInfo,
+    transact(
+        batch: DataBatch<Data<unknown, HashAndHeight>>,
         cb: (store: Store, sliceBeg: number, sliceEnd: number) => Promise<void>,
-    ): Promise<void> {
+    ): Promise<HashAndHeight> {
         return this.submit(async (em) => {
             let state = await this.getState(em)
-            let chain = [state, ...state.top]
 
-            assertChainContinuity(info.baseHead, info.newBlocks)
-            assert(info.finalizedHead.number <= (maybeLast(info.newBlocks) ?? info.baseHead).number)
-
-            assert(
-                chain.find((b) => b.hash === info.baseHead.hash),
-                RACE_MSG,
-            )
-            if (info.newBlocks.length === 0) {
-                assert(last(chain).hash === info.baseHead.hash, RACE_MSG)
-            }
-            assert(chain[0].number <= info.finalizedHead.number, RACE_MSG)
-
-            let rollbackPos = info.baseHead.number + 1 - chain[0].number
-
-            for (let i = chain.length - 1; i >= rollbackPos; i--) {
-                await rollbackBlock(this.statusSchema, em, chain[i].number)
+            let unfinalizedIndex = 0
+            if (batch.finalizedHead) {
+                unfinalizedIndex = batch.data.findIndex((b) => b.id.number > batch.finalizedHead!.number)
             }
 
-            if (info.newBlocks.length) {
-                let finalizedEnd = info.finalizedHead.number - info.newBlocks[0].number + 1
-                if (finalizedEnd > 0) {
-                    await this.performUpdates((store) => cb(store, 0, finalizedEnd), em)
-                } else {
-                    finalizedEnd = 0
+            if (unfinalizedIndex < 0) {
+                const finalizedRef = batch.data[batch.data.length - 1].id
+
+                await this.deleteHotBlocks(em, finalizedRef.number)
+                await this.performUpdates((store) => cb(store, 0, batch.data.length), em)
+                await this.updateStatus(em, state.nonce, finalizedRef)
+            } else {
+                if (batch.finalizedHead) {
+                    await this.deleteHotBlocks(em, batch.finalizedHead.number)
                 }
-                for (let i = finalizedEnd; i < info.newBlocks.length; i++) {
-                    let b = info.newBlocks[i]
+
+                if (unfinalizedIndex > 0) {
+                    await this.performUpdates((store) => cb(store, 0, unfinalizedIndex), em)
+                }
+
+                for (let i = unfinalizedIndex; i < batch.data.length; i++) {
+                    let b = batch.data[i].id
                     await this.insertHotBlock(em, b)
                     await this.performUpdates(
                         (store) => cb(store, i, i + 1),
@@ -202,15 +167,25 @@ export class TypeormDatabase {
                         new ChangeTracker(em, this.statusSchema, b.number),
                     )
                 }
+
+                await this.updateStatus(em, state.nonce, batch.finalizedHead ?? batch.data[unfinalizedIndex - 1].id)
             }
 
-            chain = chain.slice(0, rollbackPos).concat(info.newBlocks)
+            return batch.offset
+        })
+    }
 
-            let finalizedHeadPos = info.finalizedHead.number - chain[0].number
-            assert(chain[finalizedHeadPos].hash === info.finalizedHead.hash)
-            await this.deleteHotBlocks(em, info.finalizedHead.number)
+    fork(fork: DataFork<HashAndHeight>): Promise<HashAndHeight> {
+        return this.submit(async (em) => {
+            let state = await this.getState(em)
+            let chain = [state, ...state.top]
+            let rollbackPos = findRollbackIndex(chain, fork.heads)
 
-            await this.updateStatus(em, state.nonce, info.finalizedHead)
+            for (let i = chain.length - 1; i >= rollbackPos; i--) {
+                await rollbackBlock(this.statusSchema, em, chain[i].number)
+            }
+
+            return chain[chain.length - 1]
         })
     }
 
@@ -267,7 +242,7 @@ export class TypeormDatabase {
         }
     }
 
-    private async submit(tx: (em: EntityManager) => Promise<void>): Promise<void> {
+    private async submit<T>(tx: (em: EntityManager) => Promise<T>): Promise<T> {
         let retries = 3
         while (true) {
             try {
@@ -348,27 +323,18 @@ export function createTypeormTarget<TValue>(
                         hash: state.hash,
                     },
                     next: async (batch, ctx) => {
-                        await db.transact(
-                            {
-                                prevHead: ctx.offset ?? state,
-                                nextHead: batch.offset,
-                            },
-                            (store) =>
-                                handler(
-                                    store,
-                                    batch.data.map((d) => d.value),
-                                ),
+                        const offset = await db.transact(batch, (store) =>
+                            handler(
+                                store,
+                                batch.data.map((d) => d.value),
+                            ),
                         )
 
-                        return {
-                            done: false,
-                            value: {
-                                offset: batch.offset,
-                            },
-                        }
+                        return {done: false, value: {offset}}
                     },
                     fork: async (fork, ctx) => {
-                        return {done: true, value: undefined}
+                        const offset = await db.fork(fork)
+                        return {done: false, value: {offset}}
                     },
                     return: async () => {
                         await db.disconnect()
@@ -378,4 +344,19 @@ export function createTypeormTarget<TValue>(
             },
         }
     })
+}
+
+function findRollbackIndex(chainA: HashAndHeight[], chainB: HashAndHeight[]) {
+    let i = 0
+    let j = 0
+    for (; i < chainA.length; i++) {
+        const blockA = chainA[i]
+        for (; j < chainB.length; j++) {
+            let blockB = chainB[j]
+            if (blockB.number > blockA.number) break
+            if (blockB.number === blockA.number && blockB.hash !== blockA.hash) return i - 1
+        }
+        if (j === chainB.length) return i - 1
+    }
+    return i - 1
 }
