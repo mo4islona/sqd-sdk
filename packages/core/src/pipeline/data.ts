@@ -44,10 +44,9 @@ export namespace DataRef {
     export const Fork = new CompareResult(Compare.Fork)
 }
 
-export type Data<TValue = unknown, TId = unknown, TRequest = unknown> = {
+export type Data<TValue = unknown, TId = unknown> = {
     value: TValue
     id: TId
-    request?: TRequest
 }
 
 export type DataId<TData extends Data> = TData['id']
