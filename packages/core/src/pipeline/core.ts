@@ -25,12 +25,6 @@ export type DataSourceFactory<TData extends Data, TUnfinalized extends boolean> 
 >
 
 export function createSource<TData extends Data, TUnfinalized extends boolean>(
-    source: DataSource<TData, TUnfinalized>
-): DataSourceFactory<TData, TUnfinalized>
-export function createSource<TData extends Data, TUnfinalized extends boolean>(
-    source: () => Promise<DataSource<TData, TUnfinalized>>
-): DataSourceFactory<TData, TUnfinalized>
-export function createSource<TData extends Data, TUnfinalized extends boolean>(
     sourceOrFactory: DataSource<TData, TUnfinalized> | DataSourceFactory<TData, TUnfinalized>
 ): DataSourceFactory<TData, TUnfinalized> {
     return async () => {
@@ -109,12 +103,6 @@ export type DataTargetFactory<TData extends Data, TUnfinalized extends boolean, 
     opts: DataFactoryOptions<TData, TUnfinalized>
 ) => Promise<DataTarget<TData, TUnfinalized, TResult>>
 
-export function createTarget<TData extends Data, TUnfinalized extends boolean>(
-    target: DataTarget<TData, TUnfinalized>
-): DataTargetFactory<TData, TUnfinalized>
-export function createTarget<TData extends Data, TUnfinalized extends boolean>(
-    target: DataTargetFactory<TData, TUnfinalized>
-): DataTargetFactory<TData, TUnfinalized>
 export function createTarget<TData extends Data, TUnfinalized extends boolean>(
     targetOrFactory: DataTarget<TData, TUnfinalized> | DataTargetFactory<TData, TUnfinalized>
 ): DataTargetFactory<TData, TUnfinalized> {

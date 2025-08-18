@@ -1,0 +1,24 @@
+{
+    "name": "@sqd-sdk/typeorm-store",
+    "version": "0.0.0",
+    "description": "Optimized TypeORM based storage for SQD SDK",
+    "main": "lib/index.js",
+    "files": ["lib", "!lib/test", "src", "!src/test"],
+    "scripts": {
+        "build": "rm -rf lib && tsup"
+    },
+    "dependencies": {
+        "@sqd-sdk/core": "workspace:^",
+        "fast-copy": "^3.0.2"
+    },
+    "peerDependencies": {
+        "@subsquid/typeorm-config": "^4",
+        "pg": "^8.11.3",
+        "typeorm": "^0.3.20"
+    },
+    "devDependencies": {
+        "@types/node": "^20.12.7",
+        "@types/pg": "^8.11.5",
+        "typescript": "^5.4.5"
+    }
+}

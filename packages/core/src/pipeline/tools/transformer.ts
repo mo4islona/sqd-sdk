@@ -32,12 +32,6 @@ export interface DataTransformerTransformer<TInputData extends Data, TOutputData
 }
 
 export function createTransformer<TInputData extends Data, TOutputData extends Data, TUnfinalized extends boolean>(
-    transformer: DataTransformer<TInputData, TOutputData, TUnfinalized>
-): DataDuplexFactory<TInputData, TOutputData, TUnfinalized, TUnfinalized>
-export function createTransformer<TInputData extends Data, TOutputData extends Data, TUnfinalized extends boolean>(
-    factory: DataTransformerFactory<TInputData, TOutputData, TUnfinalized>
-): DataDuplexFactory<TInputData, TOutputData, TUnfinalized, TUnfinalized>
-export function createTransformer<TInputData extends Data, TOutputData extends Data, TUnfinalized extends boolean>(
     transformerOrFactory:
         | DataTransformer<TInputData, TOutputData, TUnfinalized>
         | DataTransformerFactory<TInputData, TOutputData, TUnfinalized>
