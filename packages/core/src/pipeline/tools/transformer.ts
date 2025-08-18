@@ -1,5 +1,13 @@
 import type {Data, DataBatch, DataFork, DataRef} from '../data'
-import type {DataDuplex, DataFactoryOptions, DataReader, DataWriter, DataWriterContext} from '../core'
+import type {
+    DataDuplex,
+    DataDuplexFactory,
+    DataFactoryOptions,
+    DataReaderOptions,
+    DataWriter,
+    DataWriterContext,
+    WriterOperationResult,
+} from '../core'
 import {createSource, createTarget} from '../core'
 import type {Awaitable, Maybe} from '../../internal/types'
 import {createFuture, type Future, SyncQueue} from '../../internal/async'
@@ -7,114 +15,129 @@ import {createFuture, type Future, SyncQueue} from '../../internal/async'
 export interface DataTransformer<TInputData extends Data, TOutputData extends Data, TUnfinalized extends boolean> {
     unfinalized: TUnfinalized
     ref: DataRef<TOutputData['id']>
-    transformer: ({
-        offset,
-    }: {
-        offset: Maybe<TInputData['id']>
-    }) => Awaitable<DataTransformerTransformer<TInputData, TOutputData>>
+    transformer: (
+        opts: DataReaderOptions<TOutputData>
+    ) => Awaitable<DataTransformerTransformer<TInputData, TOutputData>>
 }
 
-export interface DataTransformerTransformer<TInputData extends Data, TOutputData extends Data> {
-    offset: Maybe<TInputData['id']>
+export type DataTransformerFactory<TInputData extends Data, TOutputData extends Data, TUnfinalized extends boolean> = (
+    opts: DataFactoryOptions<TInputData, TUnfinalized>
+) => Promise<DataTransformer<TInputData, TOutputData, TUnfinalized>>
+
+export interface DataTransformerTransformer<TInputData extends Data, TOutputData extends Data>
+    extends WriterOperationResult<TInputData> {
     transform(batch: DataBatch<TInputData>, ctx: DataWriterContext<TInputData>): Promise<DataBatch<TOutputData>>
     fork(fork: DataFork<TInputData['id']>, ctx: DataWriterContext<TInputData>): Promise<DataFork<TOutputData['id']>>
+    flush?(): Promise<DataBatch<TOutputData>>
 }
 
-export async function createTransformer<
-    TInputData extends Data,
-    TOutputData extends Data,
-    TUnfinalized extends boolean
->(
-    opts: DataTransformer<TInputData, TOutputData, TUnfinalized>
-): Promise<DataDuplex<TInputData, TOutputData, TUnfinalized, TUnfinalized>> {
-    let writerFuture: Future<DataWriter<TInputData, TUnfinalized>> | undefined = undefined
+export function createTransformer<TInputData extends Data, TOutputData extends Data, TUnfinalized extends boolean>(
+    transformer: DataTransformer<TInputData, TOutputData, TUnfinalized>
+): DataDuplexFactory<TInputData, TOutputData, TUnfinalized, TUnfinalized>
+export function createTransformer<TInputData extends Data, TOutputData extends Data, TUnfinalized extends boolean>(
+    factory: DataTransformerFactory<TInputData, TOutputData, TUnfinalized>
+): DataDuplexFactory<TInputData, TOutputData, TUnfinalized, TUnfinalized>
+export function createTransformer<TInputData extends Data, TOutputData extends Data, TUnfinalized extends boolean>(
+    transformerOrFactory:
+        | DataTransformer<TInputData, TOutputData, TUnfinalized>
+        | DataTransformerFactory<TInputData, TOutputData, TUnfinalized>
+): DataDuplexFactory<TInputData, TOutputData, TUnfinalized, TUnfinalized> {
+    return async (opts) => {
+        if (typeof transformerOrFactory === 'function') {
+            const transformer = await transformerOrFactory(opts)
+            return createTransformer(transformer)(opts)
+        }
 
-    const target = createTarget<TInputData, TUnfinalized>({
-        unfinalized: opts.unfinalized,
-        writer: () => {
-            if (!writerFuture) {
-                writerFuture = createFuture()
-            }
+        let writerFuture: Future<DataWriter<TInputData, TUnfinalized>> | undefined = undefined
 
-            return writerFuture.promise()
-        },
-    })
+        const target = createTarget<TInputData, TUnfinalized>({
+            unfinalized: opts.unfinalized,
+            writer: () => {
+                if (!writerFuture) {
+                    writerFuture = createFuture()
+                }
 
-    let index = 0
+                return writerFuture.promise()
+            },
+        })
 
-    const source = createSource<TOutputData, TUnfinalized>({
-        unfinalized: opts.unfinalized,
-        ref: opts.ref,
-        reader: async (readerOpts) => {
-            const transformer = await opts.transformer({offset: readerOpts.offset})
+        const source = createSource<TOutputData, TUnfinalized>({
+            unfinalized: opts.unfinalized,
+            ref: opts.ref,
+            reader: async (readerOpts) => {
+                const transformer = await transformerOrFactory.transformer({
+                    offset: readerOpts.offset,
+                    request: readerOpts.request,
+                })
 
-            const queue = new SyncQueue<DataBatch<TOutputData>>()
+                const queue = new SyncQueue<DataBatch<TOutputData>>()
 
-            if (!writerFuture) {
-                writerFuture = createFuture()
-            }
+                if (!writerFuture) {
+                    writerFuture = createFuture()
+                }
 
-            const num = index++
+                writerFuture.resolve({
+                    offset: transformer.offset,
+                    request: transformer.request,
+                    next: async (batch, ctx) => {
+                        if (queue.isClosed) {
+                            return {done: true, value: undefined}
+                        }
 
-            writerFuture.resolve({
-                offset: transformer.offset,
-                next: async (batch, ctx) => {
-                    if (queue.isClosed) {
-                        console.log(`transformer writer ${num} is closed by next`)
-                        return {done: true, value: undefined}
-                    }
+                        const outputBatch = await transformer.transform(batch, ctx)
+                        await queue.put(outputBatch)
 
-                    const outputBatch = await transformer.transform(batch, ctx)
-                    await queue.put(outputBatch)
-
-                    return {done: false, value: {offset: outputBatch.offset}}
-                },
-                return: async () => {
-                    console.log(`transformer writer ${num} is closed by return`)
-                    queue.close()
-                    return {done: true, value: undefined}
-                },
-                throw: async (err) => {
-                    queue.close()
-                    throw err
-                },
-                fork: async (fork, ctx) => {
-                    return {done: true, value: undefined}
-                },
-            })
-
-            return {
-                async next() {
-                    if (queue.isClosed) {
-                        console.log(`transformer reader ${num} is closed by next`)
-                        return {done: true, value: undefined}
-                    }
-
-                    const batch = await queue.take()
-                    if (!batch) {
+                        return {done: false, value: {offset: outputBatch.offset}}
+                    },
+                    return: async () => {
                         queue.close()
                         return {done: true, value: undefined}
-                    }
+                    },
+                    throw: async (err) => {
+                        queue.close()
+                        throw err
+                    },
+                    fork: async (fork, ctx) => {
+                        return {done: true, value: undefined}
+                    },
+                })
 
-                    return {done: false, value: batch}
-                },
+                return {
+                    async next() {
+                        if (queue.isClosed) {
+                            if (transformer.flush) {
+                                const batch = await transformer.flush()
+                                return {done: false, value: batch}
+                            }
 
-                async return() {
-                    console.log(`transformer reader ${num} is closed by return`)
-                    writerFuture = undefined
-                    queue.close()
-                    return {done: true, value: undefined}
-                },
-                async throw(err) {
-                    queue.close()
-                    throw err
-                },
-            }
-        },
-    })
+                            return {done: true, value: undefined}
+                        }
 
-    return {
-        target: target,
-        source: source,
+                        const batch = await queue.take()
+                        if (!batch) {
+                            queue.close()
+                            return {done: true, value: undefined}
+                        }
+
+                        return {done: false, value: batch}
+                    },
+
+                    async return() {
+                        writerFuture = undefined
+                        queue.close()
+                        return {done: true, value: undefined}
+                    },
+                    async throw(err) {
+                        queue.close()
+                        throw err
+                    },
+                }
+            },
+        })
+
+        return {
+            target: await target(opts),
+            source: await source(),
+        }
     }
 }

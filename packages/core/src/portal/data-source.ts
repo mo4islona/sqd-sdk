@@ -1,7 +1,6 @@
 import {last} from '../internal/misc'
 import {Throttler} from '../internal/throttler'
-import {Maybe} from '../internal/types'
-import {ForkException, type Data, type DataBatch, DataRef, type DataSource, createSource} from '../pipeline'
+import {ForkException, type Data, type DataBatch, DataRef, createSource, type DataSourceFactory} from '../pipeline'
 import {PortalClient, type BlockRef, type PortalClientOptions, isForkException} from './client'
 import type {GetBlock, Query} from './query'
 
@@ -32,7 +31,7 @@ export type PortalData<TQuery extends Query> = Data<GetBlock<TQuery>, BlockRef>
 
 export function portalDataSource<TQuery extends Query>(
     options: PortalDataSourceOptions<TQuery>
-): DataSource<PortalData<TQuery>, true> {
+): DataSourceFactory<PortalData<TQuery>, true> {
     const portal = options.portal instanceof PortalClient ? options.portal : new PortalClient(options.portal)
     const headThrottler = new Throttler(async () => portal.getHead(), 5_000)
 

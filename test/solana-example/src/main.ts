@@ -1,15 +1,6 @@
 import {HttpClient} from '@sqd-sdk/core/http-client'
 import {createLogger} from '@sqd-sdk/core/logger'
-import {
-    createTransformer,
-    type Data,
-    type DataBatch,
-    type DataDuplex,
-    type DataFactoryOptions,
-    type DataFork,
-    pipeline,
-    createTarget,
-} from '@sqd-sdk/core/pipeline'
+import {createTransformer, type Data, pipeline, createTarget, type DataDuplexFactory} from '@sqd-sdk/core/pipeline'
 import {PortalClient} from '@sqd-sdk/core/portal'
 import {solanaPortalDataSource} from '@sqd-sdk/solana-stream'
 
@@ -28,7 +19,7 @@ async function main() {
 
     console.log(`processing range: [${fromBlock}, ${toBlock ?? null}]`)
 
-    await pipeline(() =>
+    await pipeline(
         solanaPortalDataSource({
             portal,
             query: {
@@ -63,14 +54,14 @@ async function main() {
         })
     )
         .pipeThrough(createProgressTracker('solana'))
-        .pipeTo(({ref}) =>
-            createTarget({
-                unfinalized: true,
-                writer: (opts) => {
+        .pipeTo(
+            createTarget(async (opts) => ({
+                unfinalized: opts.unfinalized,
+                writer: () => {
                     return {
                         offset: undefined,
                         next: async (batch) => {
-                            if (ref.compare(batch.offset, batch.head).isEqual) {
+                            if (opts.ref.compare(batch.offset, batch.head).isEqual) {
                                 return {done: true, value: undefined}
                             }
 
@@ -81,7 +72,7 @@ async function main() {
                         },
                     }
                 },
-            })
+            }))
         )
 
     console.log('end')
@@ -136,37 +127,37 @@ interface StateManager<T extends Data<any, any>> {
 function createProgressTracker<
     T extends Data<{header: {timestamp: number}}, {number: number}>,
     TFinalized extends boolean
->(prefix: string): (opts: DataFactoryOptions<T, TFinalized>) => Promise<DataDuplex<T, T, TFinalized, TFinalized>> {
+>(prefix: string): DataDuplexFactory<T, T, TFinalized, TFinalized> {
     const logger = createLogger(`sqd:${prefix}`)
 
-    return (opts) =>
-        createTransformer({
-            unfinalized: opts.unfinalized,
-            ref: opts.ref,
-            transformer: (opts) => {
-                return {
-                    offset: opts.offset,
-                    transform: async (batch) => {
-                        if (batch.data.length > 0) {
-                            const {offset, head, finalizedHead, data} = batch
-                            logger.info(
-                                [
-                                    `progress: ${offset.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
-                                    `blocks: ${batch.data.length}, lag: ${(
-                                        (Date.now() - data[data.length - 1].value.header.timestamp * 1000) /
-                                        1000
-                                    ).toFixed(2)}s`,
-                                ].join(', ')
-                            )
-                        }
-                        return batch
-                    },
-                    fork: async (fork) => {
-                        return {heads: fork.heads}
-                    },
-                }
-            },
-        })
+    return createTransformer(async (opts) => ({
+        unfinalized: opts.unfinalized,
+        ref: opts.ref,
+        transformer: (opts) => {
+            return {
+                offset: opts.offset,
+                request: opts.request,
+                transform: async (batch) => {
+                    if (batch.data.length > 0) {
+                        const {offset, head, finalizedHead, data} = batch
+                        logger.info(
+                            [
+                                `progress: ${offset.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
+                                `blocks: ${batch.data.length}, lag: ${(
+                                    (Date.now() - data[data.length - 1].value.header.timestamp * 1000) /
+                                    1000
+                                ).toFixed(2)}s`,
+                            ].join(', ')
+                        )
+                    }
+                    return batch
+                },
+                fork: async (fork) => {
+                    return {heads: fork.heads}
+                },
+            }
+        },
+    }))
 }
 
 main()

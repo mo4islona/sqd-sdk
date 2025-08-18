@@ -9,13 +9,9 @@ export interface DataReaderOptions<TData extends Data> {
 
 export interface DataReader<TData extends Data> extends AsyncIterator<DataBatch<TData>> {}
 
-export interface DataReaderReadOptions<TData extends Data> {
-    offset: Maybe<TData['id']>
-}
-
-export interface DataWriterOptions<TData extends Data> {
-    // FIXME: silence linter
-    _?: TData
+export interface DataFactoryOptions<TData extends Data, TUnfinalized extends boolean> {
+    unfinalized: TUnfinalized
+    ref: DataRef<TData['id']>
 }
 
 export interface DataSource<T extends Data, TUnfinalized extends boolean> {
@@ -24,33 +20,49 @@ export interface DataSource<T extends Data, TUnfinalized extends boolean> {
     reader: (opts: DataReaderOptions<T>) => Awaitable<DataReader<T>>
 }
 
+export type DataSourceFactory<TData extends Data, TUnfinalized extends boolean> = () => Promise<
+    DataSource<TData, TUnfinalized>
+>
+
 export function createSource<TData extends Data, TUnfinalized extends boolean>(
     source: DataSource<TData, TUnfinalized>
-): DataSource<TData, TUnfinalized> {
-    return {
-        ...source,
-        // [Symbol.asyncIterator]: (opts: DataReaderOptions<TData>) => {
-        //     let reader: DataReader<TData> | undefined
-        //     return {
-        //         next: async () => {
-        //             if (!reader) {
-        //                 reader = await source.reader(opts)
-        //             }
-        //             return reader.next()
-        //         },
-        //         return: async () => {
-        //             const result = await reader?.return?.()
-        //             return result ? result : {done: true, value: undefined}
-        //         },
-        //         throw: async (err: any) => {
-        //             await reader?.return?.().catch(() => {})
-        //             throw err
-        //         },
-        //         [Symbol.asyncIterator]() {
-        //             return this
-        //         },
-        //     }
-        // },
+): DataSourceFactory<TData, TUnfinalized>
+export function createSource<TData extends Data, TUnfinalized extends boolean>(
+    source: () => Promise<DataSource<TData, TUnfinalized>>
+): DataSourceFactory<TData, TUnfinalized>
+export function createSource<TData extends Data, TUnfinalized extends boolean>(
+    sourceOrFactory: DataSource<TData, TUnfinalized> | DataSourceFactory<TData, TUnfinalized>
+): DataSourceFactory<TData, TUnfinalized> {
+    return async () => {
+        if (typeof sourceOrFactory === 'function') {
+            return await sourceOrFactory()
+        }
+
+        return {
+            ...sourceOrFactory,
+            // [Symbol.asyncIterator]: (opts: DataReaderOptions<TData>) => {
+            //     let reader: DataReader<TData> | undefined
+            //     return {
+            //         next: async () => {
+            //             if (!reader) {
+            //                 reader = await source.reader(opts)
+            //             }
+            //             return reader.next()
+            //         },
+            //         return: async () => {
+            //             const result = await reader?.return?.()
+            //             return result ? result : {done: true, value: undefined}
+            //         },
+            //         throw: async (err: any) => {
+            //             await reader?.return?.().catch(() => {})
+            //             throw err
+            //         },
+            //         [Symbol.asyncIterator]() {
+            //             return this
+            //         },
+            //     }
+            // },
+        }
     }
 }
 
@@ -58,13 +70,12 @@ export interface DataWriterContext<TData extends Data> {
     offset: Maybe<TData['id']>
 }
 
-export interface WriterOperationResult<TData extends Data, TRequest = unknown> {
+export interface WriterOperationResult<TData extends Data> {
     offset: Maybe<TData['id']>
-    request?: TRequest
+    request?: TData['request']
 }
 
-export interface FinalizedDataWriter<TData extends Data, TReturn = unknown> {
-    offset: Maybe<TData['id']>
+export interface FinalizedDataWriter<TData extends Data, TReturn = unknown> extends WriterOperationResult<TData> {
     next(
         batch: DataBatch<TData>,
         ctx: DataWriterContext<TData>
@@ -91,43 +102,54 @@ export type DataWriter<TData extends Data, TUnfinalized extends boolean, TResult
 
 export interface DataTarget<TData extends Data, TUnfinalized extends boolean, TResult = unknown> {
     unfinalized: TUnfinalized
-    writer: (opts: DataWriterOptions<TData>) => Awaitable<DataWriter<TData, NoInfer<TUnfinalized>, TResult>>
+    writer: () => Awaitable<DataWriter<TData, NoInfer<TUnfinalized>, TResult>>
 }
+
+export type DataTargetFactory<TData extends Data, TUnfinalized extends boolean, TResult = unknown> = (
+    opts: DataFactoryOptions<TData, TUnfinalized>
+) => Promise<DataTarget<TData, TUnfinalized, TResult>>
 
 export function createTarget<TData extends Data, TUnfinalized extends boolean>(
     target: DataTarget<TData, TUnfinalized>
-): DataTarget<TData, TUnfinalized> {
-    return target
+): DataTargetFactory<TData, TUnfinalized>
+export function createTarget<TData extends Data, TUnfinalized extends boolean>(
+    target: DataTargetFactory<TData, TUnfinalized>
+): DataTargetFactory<TData, TUnfinalized>
+export function createTarget<TData extends Data, TUnfinalized extends boolean>(
+    targetOrFactory: DataTarget<TData, TUnfinalized> | DataTargetFactory<TData, TUnfinalized>
+): DataTargetFactory<TData, TUnfinalized> {
+    return async (opts) => {
+        if (typeof targetOrFactory === 'function') {
+            return await targetOrFactory(opts)
+        }
+
+        return targetOrFactory
+    }
 }
 
 export interface DataDuplex<
-    TData extends Data,
-    UData extends Data,
-    TUnfinalized extends boolean,
-    UUnfinalized extends boolean
+    TInputData extends Data,
+    TOutputData extends Data,
+    TInputUnfinalized extends boolean,
+    TOutputUnfinalized extends boolean
 > {
-    target: DataTarget<TData, TUnfinalized>
-    source: DataSource<UData, UUnfinalized>
+    target: DataTarget<TInputData, TInputUnfinalized>
+    source: DataSource<TOutputData, TOutputUnfinalized>
 }
-
-export interface DataFactoryOptions<TData extends Data, TUnfinalized extends boolean> {
-    unfinalized: TUnfinalized
-    ref: DataRef<TData['id']>
-}
-
-export type DataTargetFactory<TData extends Data, TUnfinalized extends boolean> = (
-    opts: DataFactoryOptions<TData, TUnfinalized>
-) => DataTarget<TData, TUnfinalized>
 
 export type DataDuplexFactory<
-    TData extends Data,
-    UData extends Data,
-    TUnfinalized extends boolean,
-    UUnfinalized extends boolean
-> = (opts: DataFactoryOptions<TData, TUnfinalized>) => DataDuplex<TData, UData, TUnfinalized, UUnfinalized>
+    TInputData extends Data,
+    TOutputData extends Data,
+    TInputUnfinalized extends boolean,
+    TOutputUnfinalized extends boolean
+> = (
+    opts: DataFactoryOptions<TInputData, TInputUnfinalized>
+) => Promise<DataDuplex<TInputData, TOutputData, TInputUnfinalized, TOutputUnfinalized>>
 
-export interface DataPipeOptions {
+export interface DataPipeOptions<TData extends Data> {
     validateBatches?: boolean
+    stopOnHead?: boolean
+    offset?: TData['id']
 }
 
 export interface Pipeline<TData extends Data, TUnfinalized extends boolean> {
@@ -135,13 +157,13 @@ export interface Pipeline<TData extends Data, TUnfinalized extends boolean> {
         duplexFactory: (
             opts: DataFactoryOptions<TData, TUnfinalized>
         ) => Awaitable<DataDuplex<TData, UData, TUnfinalized extends true ? true : boolean, UUnfinalized>>,
-        opts?: DataPipeOptions
+        opts?: DataPipeOptions<TData>
     ): Pipeline<UData, UUnfinalized>
     pipeTo<TResult>(
         targetFactory: (
             opts: DataFactoryOptions<TData, TUnfinalized>
         ) => Awaitable<DataTarget<TData, TUnfinalized extends true ? true : boolean, TResult>>,
-        opts?: DataPipeOptions
+        opts?: DataPipeOptions<TData>
     ): Promise<TResult>
     [Symbol.asyncIterator](): AsyncIterableIterator<DataBatch<TData>>
 }
@@ -151,45 +173,47 @@ export function pipeline<TData extends Data, TUnfinalized extends boolean>(
 ): Pipeline<TData, TUnfinalized> {
     return {
         pipeThrough: (duplexFactory) => {
-            return pipeline(async () => {
-                const source = await sourceFactory()
-                const duplex = await duplexFactory({
-                    unfinalized: source.unfinalized as TUnfinalized,
-                    ref: source.ref,
-                })
+            return pipeline(
+                createSource(async () => {
+                    const source = await sourceFactory()
+                    const duplex = await duplexFactory({
+                        unfinalized: source.unfinalized as TUnfinalized,
+                        ref: source.ref,
+                    })
 
-                return createSource({
-                    unfinalized: duplex.source.unfinalized,
-                    ref: duplex.source.ref,
-                    reader: async (opts) => {
-                        const reader = await duplex.source.reader(opts)
+                    return {
+                        unfinalized: duplex.source.unfinalized,
+                        ref: duplex.source.ref,
+                        reader: async (opts) => {
+                            const reader = await duplex.source.reader(opts)
 
-                        const pipePromise = pipe(source, duplex.target).catch((err) => {
-                            throw err
-                        })
+                            const pipePromise = pipe(source, duplex.target).catch((err) => {
+                                throw err
+                            })
 
-                        return {
-                            next: async () => {
-                                const result = await reader.next()
-                                if (result.done) {
+                            return {
+                                next: async () => {
+                                    const result = await reader.next()
+                                    if (result.done) {
+                                        await pipePromise
+                                    }
+                                    return result
+                                },
+                                return: async () => {
+                                    const result = await reader.return?.()
                                     await pipePromise
-                                }
-                                return result
-                            },
-                            return: async () => {
-                                const result = await reader.return?.()
-                                await pipePromise
-                                return result ? result : {done: true, value: undefined}
-                            },
-                            throw: async (err) => {
-                                const result = await reader.throw?.(err)
-                                await pipePromise
-                                return result ? result : {done: true, value: undefined}
-                            },
-                        }
-                    },
+                                    return result ? result : {done: true, value: undefined}
+                                },
+                                throw: async (err) => {
+                                    const result = await reader.throw?.(err)
+                                    await pipePromise
+                                    return result ? result : {done: true, value: undefined}
+                                },
+                            }
+                        },
+                    }
                 })
-            })
+            )
         },
         pipeTo: async (targetFactory) => {
             const source = await sourceFactory()
@@ -231,7 +255,7 @@ export function pipeline<TData extends Data, TUnfinalized extends boolean>(
 async function pipe<TData extends Data, TUnfinalized extends boolean, TResult>(
     source: DataSource<TData, TUnfinalized>,
     target: DataTarget<TData, TUnfinalized extends true ? true : boolean, TResult>,
-    opts: DataPipeOptions = {validateBatches: true}
+    opts: DataPipeOptions<TData> = {validateBatches: true}
 ): Promise<TResult> {
     if (source.unfinalized && !target.unfinalized) {
         throw new TypeError('Cannot pipe from unfinalized DataSource to finalized DataTarget')
@@ -335,6 +359,6 @@ async function pipe<TData extends Data, TUnfinalized extends boolean, TResult>(
         return processStream(reader, writer, {offset: batch.offset})
     }
 
-    const writer = await target.writer({})
-    return await processData(writer, {offset: undefined})
+    const writer = await target.writer()
+    return await processData(writer, {offset: opts.offset})
 }
