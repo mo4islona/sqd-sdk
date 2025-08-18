@@ -300,7 +300,7 @@ function assertStateInvariants(state: DatabaseState): DatabaseState {
 function assertChainContinuity(base: HashAndHeight, chain: HashAndHeight[]) {
     let prev = base
     for (let b of chain) {
-        assert(b.number === prev.number + 1, 'blocks must form a continues chain')
+        assert(b.number > prev.number, 'blocks must form a continues chain')
         prev = b
     }
 }
@@ -323,10 +323,10 @@ export function createTypeormTarget<TValue>(
                         hash: state.hash,
                     },
                     next: async (batch, ctx) => {
-                        const offset = await db.transact(batch, (store) =>
+                        const offset = await db.transact(batch, (store, sliceBeg, sliceEnd) =>
                             handler(
                                 store,
-                                batch.data.map((d) => d.value),
+                                batch.data.slice(sliceBeg, sliceEnd).map((d) => d.value),
                             ),
                         )
 
