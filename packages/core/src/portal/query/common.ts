@@ -29,7 +29,7 @@ export type Selector<Props extends PropertyKey = PropertyKey, Required extends P
     {
         [P in Exclude<Props, Required>]?: boolean
     } & {
-        [P in Required]-?: boolean
+        [P in Required]-?: true
     }
 >
 

@@ -2,29 +2,6 @@ import type {Base58, Hex} from '@sqd-sdk/core/internal/types/primitive'
 import {getInstructionDescriptor} from '../instruction'
 import type * as base from './types'
 
-// TODO: is it needed?
-export {
-    AddressTableLookup,
-    BalanceFields,
-    BalanceFieldSelection,
-    BlockHeaderFields,
-    BlockHeaderFieldSelection,
-    Discriminator,
-    InstructionFields,
-    InstructionFieldSelection,
-    LogMessageFields,
-    LogMessageFieldSelection,
-    PostTokenBalanceFields,
-    PrePostTokenBalanceFields,
-    PreTokenBalanceFields,
-    RewardFields,
-    RewardFieldSelection,
-    TokenBalanceFields,
-    TokenBalanceFieldSelection,
-    TransactionFields,
-    TransactionFieldSelection,
-} from '@sqd-sdk/core/portal/solana'
-
 export function blockFromPartial<F extends base.RequiredFieldSelection>(src: base.BlockPartial<F>): base.Block<F> {
     // FIXME: why types are broken
     return Object.assign(new Block(), {
