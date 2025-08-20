@@ -73,7 +73,7 @@ export interface FinalizedDataWriter<TData extends Data, TReturn = unknown> exte
     next(
         batch: DataBatch<TData>,
         ctx: DataWriterContext<TData>,
-    ): Promise<IteratorResult<WriterOperationResult<TData>, TReturn>>
+    ): Promise<IteratorResult<Maybe<WriterOperationResult<TData>>, TReturn>>
     return?(): Promise<IteratorReturnResult<TReturn>>
     fork?(
         fork: DataFork<TData['id']>,
@@ -334,12 +334,8 @@ async function pipe<TData extends Data, TUnfinalized extends boolean, TResult>(
             }
         }
 
-        // NOTE: If the offset is not the same as the batch offset,
-        // it means that the batch was not fully consumed or we want to skip
-        // so we break the current stream and start from the new offset
         // FIXME: Do we want this behavior?
-        if (!value.offset || !source.ref.compare(value.offset, batch.offset).isEqual || value.request) {
-            // FIXME: looks like a hack, revisit this
+        if (value) {
             await reader.return?.()
             return processData(writer, {
                 offset: value.offset,

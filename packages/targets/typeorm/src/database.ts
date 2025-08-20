@@ -330,7 +330,7 @@ export function createTypeormTarget<TValue>(
                             ),
                         )
 
-                        return {done: false, value: {offset}}
+                        return {done: false, value: undefined}
                     },
                     fork: async (fork, ctx) => {
                         const offset = await db.fork(fork)

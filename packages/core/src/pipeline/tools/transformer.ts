@@ -16,12 +16,12 @@ export interface DataTransformer<TInputData extends Data, TOutputData extends Da
     unfinalized: TUnfinalized
     ref: DataRef<TOutputData['id']>
     transformer: (
-        opts: DataReaderOptions<TOutputData>
+        opts: DataReaderOptions<TOutputData>,
     ) => Awaitable<DataTransformerTransformer<TInputData, TOutputData>>
 }
 
 export type DataTransformerFactory<TInputData extends Data, TOutputData extends Data, TUnfinalized extends boolean> = (
-    opts: DataFactoryOptions<TInputData, TUnfinalized>
+    opts: DataFactoryOptions<TInputData, TUnfinalized>,
 ) => Promise<DataTransformer<TInputData, TOutputData, TUnfinalized>>
 
 export interface DataTransformerTransformer<TInputData extends Data, TOutputData extends Data>
@@ -34,7 +34,7 @@ export interface DataTransformerTransformer<TInputData extends Data, TOutputData
 export function createTransformer<TInputData extends Data, TOutputData extends Data, TUnfinalized extends boolean>(
     transformerOrFactory:
         | DataTransformer<TInputData, TOutputData, TUnfinalized>
-        | DataTransformerFactory<TInputData, TOutputData, TUnfinalized>
+        | DataTransformerFactory<TInputData, TOutputData, TUnfinalized>,
 ): DataDuplexFactory<TInputData, TOutputData, TUnfinalized, TUnfinalized> {
     return async (opts) => {
         if (typeof transformerOrFactory === 'function') {
@@ -81,7 +81,7 @@ export function createTransformer<TInputData extends Data, TOutputData extends D
                         const outputBatch = await transformer.transform(batch, ctx)
                         await queue.put(outputBatch)
 
-                        return {done: false, value: {offset: outputBatch.offset}}
+                        return {done: false, value: undefined}
                     },
                     return: async () => {
                         queue.close()
