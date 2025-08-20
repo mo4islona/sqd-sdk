@@ -120,52 +120,6 @@ async function main() {
     console.log('end')
 }
 
-interface StateManager<T extends Data<any, any>> {
-    get(): Promise<T['id'] | undefined>
-    set(ref: T['id']): Promise<void>
-    fork(refs: T['id'][]): Promise<T['id'] | undefined>
-}
-
-// function createStateTarget<T extends Data<any, any>>(opts: {
-//     state: StateManager<T>
-//     transact: (batch: DataBatch<T>) => Promise<unknown>
-//     rollback: (block: DataRef<T>) => Promise<unknown>
-// }): DataTargetFactory<T, true> {
-//     const {state, transact, rollback} = opts
-
-//     return (opts) =>
-//         new DataTarget({
-//             unfinalized: opts.unfinalized,
-//             ref: opts.ref,
-//             writer: async () => {
-//                 const head = await state.get()
-//                 if (head) {
-//                     await rollback(head)
-//                 }
-
-//                 return {
-//                     offset: head,
-//                     next: async (batch) => {
-//                         await transact(batch)
-
-//                         if (batch.data.length > 0) {
-//                             await state.set(batch.data[batch.data.length - 1].id)
-//                         }
-
-//                         return {done: false, value: batch.offset}
-//                     },
-//                     fork: async (fork) => {
-//                         const newHead = await state.fork(fork.heads)
-//                         if (newHead) {
-//                             await rollback(newHead)
-//                         }
-//                         return {done: false, value: newHead}
-//                     },
-//                 }
-//             },
-//         })
-// }
-
 function createProgressTracker<
     T extends Data<{header: {timestamp: number}}, {number: number}>,
     TFinalized extends boolean,

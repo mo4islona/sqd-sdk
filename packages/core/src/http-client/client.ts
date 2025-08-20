@@ -102,7 +102,7 @@ export class HttpClient implements BaseHttpClient {
                 if (retryAttempts > retries && isRetryableError(res, req)) {
                     let pause = asRetryAfterPause(res)
                     if (pause == null) {
-                        pause = retrySchedule.length ? retrySchedule[Math.min(retries, retrySchedule.length - 1)] : 1000
+                        pause = retrySchedule[Math.min(retries, retrySchedule.length - 1)] ?? 1000
                     }
                     retries += 1
                     this.beforeRetryPause(req, res, pause)
@@ -128,7 +128,7 @@ export class HttpClient implements BaseHttpClient {
                     httpRequestHeaders: Array.from(req.headers),
                     httpRequestBody: req.body,
                 },
-                'http request'
+                'http request',
             )
         }
     }
@@ -163,7 +163,7 @@ export class HttpClient implements BaseHttpClient {
                     httpResponseStatus: status,
                     httpResponseHeaders: Array.from(headers),
                 },
-                'http headers'
+                'http headers',
             )
         }
     }
@@ -181,7 +181,7 @@ export class HttpClient implements BaseHttpClient {
                     httpRequestId: req.id,
                     httpResponseBody,
                 },
-                'http body'
+                'http body',
             )
         }
     }
@@ -292,7 +292,7 @@ export class HttpClient implements BaseHttpClient {
             res.status,
             res.headers,
             body,
-            body instanceof ReadableStream
+            body instanceof ReadableStream,
         )
         this.afterResponse(req, httpResponse)
         return httpResponse
@@ -314,7 +314,7 @@ export class HttpClient implements BaseHttpClient {
             return res.json()
         }
 
-        if (contentType.startsWith('text/')) {
+        if (contentType?.startsWith('text/')) {
             return res.text()
         }
 
@@ -366,7 +366,7 @@ export class HttpResponse<T = any> {
         public readonly status: number,
         public readonly headers: Headers,
         public readonly body: T,
-        public readonly stream: boolean
+        public readonly stream: boolean,
     ) {}
 
     get ok(): boolean {
