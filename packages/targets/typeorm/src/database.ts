@@ -317,11 +317,9 @@ export function createTypeormTarget<TValue>(
             writer: async () => {
                 const state = await db.connect()
 
+                const offset = state.top.length > 0 ? state.top[state.top.length - 1] : state
                 return {
-                    offset: {
-                        number: state.number,
-                        hash: state.hash,
-                    },
+                    offset,
                     next: async (batch, ctx) => {
                         const offset = await db.transact(batch, (store, sliceBeg, sliceEnd) =>
                             handler(
