@@ -1,7 +1,7 @@
 import {HttpClient} from '@sqd-sdk/core/http-client'
 import {assert} from '@sqd-sdk/core/internal/misc'
 import {createLogger} from '@sqd-sdk/core/logger'
-import {createTransformer, pipeline, type Data, type DataDuplexFactory} from '@sqd-sdk/core/pipeline'
+import {createTarget, createTransformer, pipeline, type Data, type DataDuplexFactory} from '@sqd-sdk/core/pipeline'
 import {PortalClient} from '@sqd-sdk/core/portal'
 import {solanaPortalDataSource} from '@sqd-sdk/solana-stream'
 import {createTypeormTarget} from '@sqd-sdk/typeorm-store/lib/database'
@@ -59,6 +59,8 @@ async function main() {
                                     d8: ['0xf8c69e91e17587c8'],
                                     isCommitted: true,
                                     innerInstructions: true,
+                                    transaction: true,
+                                    transactionTokenBalances: true,
                                 },
                             ],
                         },
@@ -69,7 +71,7 @@ async function main() {
     )
         .pipeThrough(createProgressTracker('solana'))
         .pipeTo(
-            createTypeormTarget({supportHotBlocks: true}, async (store, batch) => {
+            createTypeormTarget({}, async (store, batch) => {
                 for (let block of batch) {
                     for (let ins of block.instructions) {
                         if (ins.programId === whirlpool.programId && ins.d8 === whirlpool.instructions.swap.d8) {
@@ -126,33 +128,39 @@ function createProgressTracker<
 >(prefix: string): DataDuplexFactory<T, T, TFinalized, TFinalized> {
     const logger = createLogger(`sqd:${prefix}`)
 
-    return createTransformer(async (opts) => ({
-        unfinalized: opts.unfinalized,
-        ref: opts.ref,
-        transformer: (opts) => {
-            return {
-                offset: opts.offset,
-                request: opts.request,
-                transform: async (batch) => {
-                    if (batch.data.length > 0) {
-                        const {offset, head, finalizedHead, data} = batch
-                        logger.info(
-                            [
-                                `progress: ${offset.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
-                                `blocks: ${batch.data.length}, lag: ${(
-                                    (Date.now() - data[data.length - 1].value.header.timestamp * 1000) / 1000
-                                ).toFixed(2)}s`,
-                            ].join(', '),
-                        )
-                    }
-                    return batch
-                },
-                fork: async (fork) => {
-                    return {heads: fork.heads}
-                },
-            }
-        },
-    }))
+    return createTransformer(async (opts) => {
+        return {
+            unfinalized: opts.unfinalized,
+            ref: opts.ref,
+            transformer: (opts) => {
+                if (opts.offset) {
+                    logger.info(`continue from ${opts.offset.number}`)
+                }
+
+                return {
+                    offset: opts.offset,
+                    request: opts.request,
+                    transform: async (batch) => {
+                        if (batch.data.length > 0) {
+                            const {offset, head, finalizedHead, data} = batch
+                            logger.info(
+                                [
+                                    `progress: ${offset.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
+                                    `blocks: ${batch.data.length}, lag: ${(
+                                        (Date.now() - data[data.length - 1].value.header.timestamp * 1000) / 1000
+                                    ).toFixed(2)}s`,
+                                ].join(', '),
+                            )
+                        }
+                        return batch
+                    },
+                    fork: async (fork) => {
+                        return {heads: fork.heads}
+                    },
+                }
+            },
+        }
+    })
 }
 
 function formatId(block: {number: number; hash: string}, ...address: number[]): string {

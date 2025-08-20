@@ -31,18 +31,18 @@ export interface SolanaPortalDataReaderOptions<Q extends SolanaQueryOptions> {
 export type SolanaPortalData<Q extends SolanaQueryOptions> = Data<Block<GetFields<Q['fields']>>, BlockRef>
 
 export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
-    options: SolanaPortalDataReaderOptions<Q>
+    options: SolanaPortalDataReaderOptions<Q>,
 ): DataSourceFactory<SolanaPortalData<Q>, true> {
     const fields = getFields(options.query.fields)
     const requests = mergeRangeRequests(options.query.requests, mergeDataRequests)
 
     const createDataStream = async function* (
-        offset?: BlockRef
+        offset?: BlockRef,
     ): AsyncIterableIterator<DataBatch<SolanaPortalData<Q>>> {
         const requestsBounded = offset ? applyRangeBound(requests, {from: offset.number + 1}) : requests
 
         for (const request of requestsBounded) {
-            for await (const data of pipeline(() =>
+            for await (const batch of pipeline(() =>
                 portalDataSource({
                     portal: options.portal,
                     query: {
@@ -52,9 +52,17 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
                         fields,
                         ...request.request,
                     },
-                })()
+                })(),
             )) {
-                yield data as DataBatch<SolanaPortalData<Q>>
+                yield {
+                    data: batch.data.map((i) => ({
+                        value: mapBlock(i.value, fields),
+                        id: i.id,
+                    })),
+                    finalizedHead: batch.finalizedHead,
+                    head: batch.head,
+                    offset: batch.offset,
+                }
             }
         }
     }
@@ -68,11 +76,9 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
 
 export function mapBlock<F extends RequiredFieldSelection>(
     rawBlock: unknown,
-    fields: RequiredFieldSelection
+    fields: RequiredFieldSelection,
 ): Block<F> {
-    const validator = getDataSchema(fields)
-    const partial = cast(validator, rawBlock) as BlockPartial<F>
-    const block = blockFromPartial(partial)
+    const block = blockFromPartial(rawBlock as BlockPartial<F>)
     setUpRelations(block as any)
 
     return block
