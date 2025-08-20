@@ -265,18 +265,9 @@ async function pipe<TData extends Data, TUnfinalized extends boolean, TResult>(
         writer: DataWriter<TData, boolean>,
         ctx: DataWriterContext<TData>,
     ): Promise<TResult> => {
-        let batch: DataBatch<TData> | undefined
+        let result: IteratorResult<DataBatch<TData>, TResult> | undefined
         try {
-            const {done, value} = await reader.next()
-            if (done) {
-                const result = await writer.return?.()
-                if (result && !result.done) {
-                    throw new Error('Writer returned a non-done result in return')
-                }
-                // FIXME: how to type this?
-                return result?.value as TResult
-            }
-            batch = value
+            result = await reader.next()
         } catch (err) {
             if (!isForkException<TData>(err)) {
                 throw err
@@ -297,13 +288,16 @@ async function pipe<TData extends Data, TUnfinalized extends boolean, TResult>(
 
             return processData(writer, {offset: value})
         }
-
-        const {value, done} = await writer.next(batch, ctx)
-        if (done) {
-            await reader.return?.()
-            return value as TResult
+        if (result.done) {
+            const result = await writer.return?.()
+            if (result && !result.done) {
+                throw new Error('Writer returned a non-done result in return')
+            }
+            // FIXME: how to type this?
+            return result?.value as TResult
         }
 
+        const batch = result.value
         if (opts.validateBatches) {
             if (ctx.offset && !source.ref.compare(batch.offset, ctx.offset).isGreaterOrEqual) {
                 throw new Error('New offset is below the previous offset')
@@ -319,7 +313,7 @@ async function pipe<TData extends Data, TUnfinalized extends boolean, TResult>(
 
             let lastRef = ctx.offset
             for (const item of batch.data) {
-                if (lastRef && !source.ref.compare(item.id, lastRef).isGreaterOrEqual) {
+                if (lastRef && !source.ref.compare(item.id, lastRef).isGreater) {
                     throw new Error('Item is below or equal to the previous item')
                 }
                 lastRef = item.id
@@ -332,6 +326,12 @@ async function pipe<TData extends Data, TUnfinalized extends boolean, TResult>(
             if (lastRef && !source.ref.compare(batch.head, lastRef).isGreaterOrEqual) {
                 throw new Error('Head is below the data')
             }
+        }
+
+        const {value, done} = await writer.next(batch, ctx)
+        if (done) {
+            await reader.return?.()
+            return value as TResult
         }
 
         // FIXME: Do we want this behavior?

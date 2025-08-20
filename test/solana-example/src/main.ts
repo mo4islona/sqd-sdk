@@ -1,13 +1,13 @@
 import {HttpClient} from '@sqd-sdk/core/http-client'
 import {assert} from '@sqd-sdk/core/internal/misc'
 import {createLogger} from '@sqd-sdk/core/logger'
-import {createTransformer, type Data, pipeline, type DataDuplexFactory} from '@sqd-sdk/core/pipeline'
+import {createTransformer, pipeline, type Data, type DataDuplexFactory} from '@sqd-sdk/core/pipeline'
 import {PortalClient} from '@sqd-sdk/core/portal'
 import {solanaPortalDataSource} from '@sqd-sdk/solana-stream'
 import {createTypeormTarget} from '@sqd-sdk/typeorm-store/lib/database'
-import {Exchange} from './model'
-import * as whirlpool from './abi/whirlpool'
 import * as tokenProgram from './abi/token-program'
+import * as whirlpool from './abi/whirlpool'
+import {Exchange} from './model'
 
 async function main() {
     let portal = new PortalClient({
