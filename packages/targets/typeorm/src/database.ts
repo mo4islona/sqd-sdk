@@ -1,5 +1,5 @@
 import {createLogger} from '@sqd-sdk/core/logger'
-import {assert, assertNotNull, last, maybeLast} from '@sqd-sdk/core/internal/misc'
+import {assert, assertNotNull, last, maybeLast, unexpectedCase} from '@sqd-sdk/core/internal/misc'
 import {DataSource, EntityTarget, FindManyOptions, type EntityManager} from 'typeorm'
 import {Store} from './store'
 import {StateManager} from './utils/stateManager'
@@ -306,39 +306,45 @@ function assertChainContinuity(base: HashAndHeight, chain: HashAndHeight[]) {
 }
 
 export function createTypeormTarget<TValue>(
-    opts: TypeormDatabaseOptions,
+    databaseOpts: TypeormDatabaseOptions,
     handler: (store: Store, batch: TValue[]) => Promise<void>,
 ) {
-    let db = new TypeormDatabase(opts)
-
     return createTarget<Data<TValue, HashAndHeight>, true>(async (opts) => {
         return {
             unfinalized: true,
-            writer: async () => {
+            write: async ({ref, read}) => {
+                let db = new TypeormDatabase(databaseOpts)
                 const state = await db.connect()
 
                 const offset = state.top.length > 0 ? state.top[state.top.length - 1] : state
-                return {
-                    offset,
-                    next: async (batch, ctx) => {
-                        const offset = await db.transact(batch, (store, sliceBeg, sliceEnd) =>
-                            handler(
-                                store,
-                                batch.data.slice(sliceBeg, sliceEnd).map((d) => d.value),
-                            ),
-                        )
 
-                        return {done: false, value: undefined}
-                    },
-                    fork: async (fork, ctx) => {
-                        const offset = await db.fork(fork)
-                        return {done: false, value: {offset}}
-                    },
-                    return: async () => {
-                        await db.disconnect()
-                        return {done: true, value: undefined}
-                    },
+                async function process(offset: HashAndHeight) {
+                    for await (const message of read({offset})) {
+                        switch (message.type) {
+                            case 'batch': {
+                                const batch = message.value
+                                await db.transact(batch, (store, sliceBeg, sliceEnd) =>
+                                    handler(
+                                        store,
+                                        batch.data.slice(sliceBeg, sliceEnd).map((d) => d.value),
+                                    ),
+                                )
+                                break
+                            }
+                            case 'fork': {
+                                const offset = await db.fork(message.value)
+                                return process(offset)
+                            }
+                            default: {
+                                throw unexpectedCase((message as any).type)
+                            }
+                        }
+                    }
                 }
+
+                await process(offset)
+
+                await db.disconnect()
             },
         }
     })

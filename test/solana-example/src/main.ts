@@ -1,7 +1,14 @@
 import {HttpClient} from '@sqd-sdk/core/http-client'
 import {assert} from '@sqd-sdk/core/internal/misc'
 import {createLogger} from '@sqd-sdk/core/logger'
-import {createTarget, createTransformer, pipeline, type Data, type DataDuplexFactory} from '@sqd-sdk/core/pipeline'
+import {
+    createTarget,
+    createTransformer,
+    handleMessage,
+    pipeline,
+    type Data,
+    type DataDuplexFactory,
+} from '@sqd-sdk/core/pipeline'
 import {PortalClient} from '@sqd-sdk/core/portal'
 import {solanaPortalDataSource} from '@sqd-sdk/solana-stream'
 import {createTypeormTarget} from '@sqd-sdk/typeorm-store/lib/database'
@@ -124,39 +131,44 @@ async function main() {
 
 function createProgressTracker<
     T extends Data<{header: {timestamp: number}}, {number: number}>,
-    TFinalized extends boolean,
->(prefix: string): DataDuplexFactory<T, T, TFinalized, TFinalized> {
+    TUnfinalized extends boolean,
+    TRequest,
+>(prefix: string): DataDuplexFactory<T, T, TUnfinalized, TUnfinalized, TRequest, TRequest> {
     const logger = createLogger(`sqd:${prefix}`)
 
     return createTransformer(async (opts) => {
         return {
             unfinalized: opts.unfinalized,
             ref: opts.ref,
-            transformer: (opts) => {
-                if (opts.offset) {
-                    logger.info(`continue from ${opts.offset.number}`)
+            transform: async function* (transformOpts) {
+                if (transformOpts.offset) {
+                    logger.info(`continue from ${transformOpts.offset.number}`)
                 }
 
-                return {
-                    offset: opts.offset,
-                    request: opts.request,
-                    transform: async (batch) => {
-                        if (batch.data.length > 0) {
-                            const {offset, head, finalizedHead, data} = batch
-                            logger.info(
-                                [
-                                    `progress: ${offset.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
-                                    `blocks: ${batch.data.length}, lag: ${(
-                                        (Date.now() - data[data.length - 1].value.header.timestamp * 1000) / 1000
-                                    ).toFixed(2)}s`,
-                                ].join(', '),
-                            )
-                        }
-                        return batch
-                    },
-                    fork: async (fork) => {
-                        return {heads: fork.heads}
-                    },
+                for await (const message of transformOpts.read({
+                    offset: transformOpts.offset,
+                    request: transformOpts.request,
+                })) {
+                    switch (message.type) {
+                        case 'batch':
+                            if (message.value.data.length > 0) {
+                                const {offset, head, finalizedHead, data} = message.value
+                                logger.info(
+                                    [
+                                        `progress: ${offset.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
+                                        `blocks: ${message.value.data.length}, lag: ${(
+                                            (Date.now() - data[data.length - 1].value.header.timestamp * 1000) / 1000
+                                        ).toFixed(2)}s`,
+                                    ].join(', '),
+                                )
+                            }
+                            break
+                        case 'fork':
+                            logger.info(`fork: ${message.value.heads[message.value.heads.length - 1].number}`)
+                            break
+                    }
+
+                    yield message
                 }
             },
         }

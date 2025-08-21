@@ -1,129 +1,111 @@
-import type {Data, DataBatch, DataFork, DataRef} from '../data'
+import type {Data, DataRef} from '../data'
 import type {
     DataDuplex,
     DataDuplexFactory,
     DataFactoryOptions,
-    DataReaderOptions,
-    DataWriter,
-    DataWriterContext,
-    WriterOperationResult,
+    DataReadOptions,
+    DataMessage,
+    DataWriteOptions,
+    DataTarget,
 } from '../core'
 import {createSource, createTarget} from '../core'
-import type {Awaitable, Maybe} from '../../internal/types'
-import {createFuture, type Future, SyncQueue} from '../../internal/async'
+import {createFuture, SyncQueue, type Future} from '../../internal/async'
 
-export interface DataTransformer<TInputData extends Data, TOutputData extends Data, TUnfinalized extends boolean> {
+export interface DataTransformer<
+    TInputData extends Data,
+    TOutputData extends Data,
+    TUnfinalized extends boolean,
+    TInputRequest,
+    TOutputRequest,
+> {
     unfinalized: TUnfinalized
     ref: DataRef<TOutputData['id']>
-    transformer: (
-        opts: DataReaderOptions<TOutputData>,
-    ) => Awaitable<DataTransformerTransformer<TInputData, TOutputData>>
+    transform: (
+        opts: DataReadOptions<TOutputData, TOutputRequest> & DataWriteOptions<TInputData, TUnfinalized, TInputRequest>,
+    ) => AsyncIterableIterator<DataMessage<TOutputData, TUnfinalized>>
 }
 
-export type DataTransformerFactory<TInputData extends Data, TOutputData extends Data, TUnfinalized extends boolean> = (
+export type DataTransformerFactory<
+    TInputData extends Data,
+    TOutputData extends Data,
+    TUnfinalized extends boolean,
+    TInputRequest,
+    TOutputRequest,
+> = (
     opts: DataFactoryOptions<TInputData, TUnfinalized>,
-) => Promise<DataTransformer<TInputData, TOutputData, TUnfinalized>>
+) => Promise<DataTransformer<TInputData, TOutputData, TUnfinalized, TInputRequest, TOutputRequest>>
 
-export interface DataTransformerTransformer<TInputData extends Data, TOutputData extends Data>
-    extends WriterOperationResult<TInputData> {
-    transform(batch: DataBatch<TInputData>, ctx: DataWriterContext<TInputData>): Promise<DataBatch<TOutputData>>
-    fork(fork: DataFork<TInputData['id']>, ctx: DataWriterContext<TInputData>): Promise<DataFork<TOutputData['id']>>
-    flush?(): Promise<DataBatch<TOutputData>>
-}
-
-export function createTransformer<TInputData extends Data, TOutputData extends Data, TUnfinalized extends boolean>(
+export function createTransformer<
+    TInputData extends Data,
+    TOutputData extends Data,
+    TUnfinalized extends boolean,
+    TInputRequest,
+    TOutputRequest,
+>(
     transformerOrFactory:
-        | DataTransformer<TInputData, TOutputData, TUnfinalized>
-        | DataTransformerFactory<TInputData, TOutputData, TUnfinalized>,
-): DataDuplexFactory<TInputData, TOutputData, TUnfinalized, TUnfinalized> {
+        | DataTransformer<TInputData, TOutputData, TUnfinalized, TInputRequest, TOutputRequest>
+        | DataTransformerFactory<TInputData, TOutputData, TUnfinalized, TInputRequest, TOutputRequest>,
+): DataDuplexFactory<TInputData, TOutputData, TUnfinalized, TUnfinalized, TInputRequest, TOutputRequest> {
     return async (opts) => {
         if (typeof transformerOrFactory === 'function') {
             const transformer = await transformerOrFactory(opts)
             return createTransformer(transformer)(opts)
         }
 
-        let writerFuture: Future<DataWriter<TInputData, TUnfinalized>> | undefined = undefined
+        const queue = new SyncQueue<DataMessage<TOutputData, TUnfinalized>>()
+        let readOptsFuture: Future<DataReadOptions<TOutputData, TOutputRequest>> | undefined = undefined
 
-        const target = createTarget<TInputData, TUnfinalized>({
+        const target = createTarget<TInputData, TUnfinalized, TInputRequest>({
             unfinalized: opts.unfinalized,
-            writer: () => {
-                if (!writerFuture) {
-                    writerFuture = createFuture()
+            write: async (writeOpts) => {
+                if (!readOptsFuture) {
+                    readOptsFuture = createFuture()
                 }
 
-                return writerFuture.promise()
+                const readOpts = await readOptsFuture.promise()
+                try {
+                    for await (const message of transformerOrFactory.transform({
+                        ...writeOpts,
+                        ...readOpts,
+                    })) {
+                        await queue.put(message)
+                    }
+                } finally {
+                    queue.close()
+                }
             },
         })
 
-        const source = createSource<TOutputData, TUnfinalized>({
-            unfinalized: opts.unfinalized,
-            ref: opts.ref,
-            reader: async (readerOpts) => {
-                const transformer = await transformerOrFactory.transformer({
-                    offset: readerOpts.offset,
-                    request: readerOpts.request,
-                })
-
-                const queue = new SyncQueue<DataBatch<TOutputData>>()
-
-                if (!writerFuture) {
-                    writerFuture = createFuture()
+        const source = createSource<TOutputData, TUnfinalized, TOutputRequest>({
+            unfinalized: transformerOrFactory.unfinalized,
+            ref: transformerOrFactory.ref,
+            read: (readOpts) => {
+                if (!readOptsFuture) {
+                    readOptsFuture = createFuture()
                 }
 
-                writerFuture.resolve({
-                    offset: transformer.offset,
-                    request: transformer.request,
-                    next: async (batch, ctx) => {
-                        if (queue.isClosed) {
-                            return {done: true, value: undefined}
+                readOptsFuture.resolve(readOpts)
+
+                return {
+                    next: async () => {
+                        const message = await queue.take()
+                        if (message) {
+                            return {done: false, value: message}
                         }
-
-                        const outputBatch = await transformer.transform(batch, ctx)
-                        await queue.put(outputBatch)
-
-                        return {done: false, value: undefined}
+                        return {done: true, value: undefined}
                     },
                     return: async () => {
                         queue.close()
+                        readOptsFuture = undefined
                         return {done: true, value: undefined}
                     },
-                    throw: async (err) => {
+                    throw: async (error) => {
                         queue.close()
-                        throw err
+                        readOptsFuture = undefined
+                        throw error
                     },
-                    fork: async (fork, ctx) => {
-                        return {done: true, value: undefined}
-                    },
-                })
-
-                return {
-                    async next() {
-                        if (queue.isClosed) {
-                            if (transformer.flush) {
-                                const batch = await transformer.flush()
-                                return {done: false, value: batch}
-                            }
-
-                            return {done: true, value: undefined}
-                        }
-
-                        const batch = await queue.take()
-                        if (!batch) {
-                            queue.close()
-                            return {done: true, value: undefined}
-                        }
-
-                        return {done: false, value: batch}
-                    },
-
-                    async return() {
-                        writerFuture = undefined
-                        queue.close()
-                        return {done: true, value: undefined}
-                    },
-                    async throw(err) {
-                        queue.close()
-                        throw err
+                    [Symbol.asyncIterator]() {
+                        return this
                     },
                 }
             },

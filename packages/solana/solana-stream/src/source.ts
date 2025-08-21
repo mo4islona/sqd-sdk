@@ -1,6 +1,5 @@
 import {applyRangeBound, mergeRangeRequests} from '@sqd-sdk/core/internal/range/index'
-import {type DataBatch, type Data, createSource, pipeline, type DataSourceFactory} from '@sqd-sdk/core/pipeline'
-import {cast} from '@sqd-sdk/core/validation'
+import {type Data, createSource, type DataSourceFactory, type DataMessage, handleMessage} from '@sqd-sdk/core/pipeline'
 import {
     type Block,
     blockFromPartial,
@@ -9,7 +8,6 @@ import {
     type RequiredFieldSelection,
     REQUIRED_FIELDS,
 } from './objects'
-import {getDataSchema} from './schema'
 import {setUpRelations} from './objects/relations'
 import {mergeDataRequests, type SolanaQueryOptions} from './query'
 import {
@@ -38,31 +36,46 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
 
     const createDataStream = async function* (
         offset?: BlockRef,
-    ): AsyncIterableIterator<DataBatch<SolanaPortalData<Q>>> {
+    ): AsyncIterableIterator<DataMessage<SolanaPortalData<Q>, true>> {
         const requestsBounded = offset ? applyRangeBound(requests, {from: offset.number + 1}) : requests
 
         for (const request of requestsBounded) {
-            for await (const batch of pipeline(() =>
-                portalDataSource({
-                    portal: options.portal,
-                    query: {
-                        type: 'solana' as const,
-                        fromBlock: request.range.from,
-                        toBlock: request.range.to,
-                        fields,
-                        ...request.request,
+            const portalSource = await portalDataSource({
+                portal: options.portal,
+                query: {
+                    type: 'solana' as const,
+                    fromBlock: request.range.from,
+                    toBlock: request.range.to,
+                    fields,
+                    ...request.request,
+                },
+            })()
+
+            for await (const message of portalSource.read({offset})) {
+                yield handleMessage(message, {
+                    batch: (batch) => {
+                        return {
+                            type: 'batch' as const,
+                            value: {
+                                data: batch.data.map(
+                                    (i): SolanaPortalData<Q> => ({
+                                        value: mapBlock(i.value, fields),
+                                        id: i.id,
+                                    }),
+                                ),
+                                finalizedHead: batch.finalizedHead,
+                                head: batch.head,
+                                offset: batch.offset,
+                            },
+                        }
                     },
-                })(),
-            )) {
-                yield {
-                    data: batch.data.map((i) => ({
-                        value: mapBlock(i.value, fields),
-                        id: i.id,
-                    })),
-                    finalizedHead: batch.finalizedHead,
-                    head: batch.head,
-                    offset: batch.offset,
-                }
+                    fork: (fork) => {
+                        return {
+                            type: 'fork' as const,
+                            value: {heads: fork.heads},
+                        }
+                    },
+                })
             }
         }
     }
@@ -70,7 +83,7 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
     return createSource({
         unfinalized: true,
         ref: BlockId,
-        reader: (opts) => createDataStream(opts.offset),
+        read: (opts) => createDataStream(opts.offset),
     })
 }
 
