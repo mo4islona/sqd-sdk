@@ -1,6 +1,20 @@
-import {isForkException} from './errors'
+import {ForkException, isForkException} from './errors'
 import type {Data, DataBatch, DataFork, DataRef} from './data'
 import type {Awaitable, Maybe} from '../internal/types'
+
+export interface DataBatchMessage<TData extends Data> {
+    type: 'batch'
+    batch: DataBatch<TData>
+}
+
+export interface DataForkMessage<TData extends Data> {
+    type: 'fork'
+    fork: DataFork<TData['id']>
+}
+
+export type DataMessage<TData extends Data, TUnfinalized extends boolean> = TUnfinalized extends true
+    ? DataBatchMessage<TData> | DataForkMessage<TData>
+    : DataBatchMessage<TData>
 
 export interface DataReaderOptions<TData extends Data, TRequest = unknown> {
     offset: Maybe<TData['id']>
@@ -17,7 +31,7 @@ export interface DataFactoryOptions<TData extends Data, TUnfinalized extends boo
 export interface DataSource<T extends Data, TUnfinalized extends boolean> {
     unfinalized: TUnfinalized
     ref: DataRef<T['id']>
-    reader: (opts: DataReaderOptions<T>) => Awaitable<DataReader<T>>
+    read: (opts: DataReaderOptions<T>) => AsyncIterableIterator<DataMessage<T, TUnfinalized>>
 }
 
 export type DataSourceFactory<TData extends Data, TUnfinalized extends boolean> = () => Promise<
@@ -96,7 +110,9 @@ export type DataWriter<TData extends Data, TUnfinalized extends boolean, TResult
 
 export interface DataTarget<TData extends Data, TUnfinalized extends boolean, TResult = unknown> {
     unfinalized: TUnfinalized
-    writer: () => Awaitable<DataWriter<TData, NoInfer<TUnfinalized>, TResult>>
+    write: (
+        stream: (opts: DataReaderOptions<TData>) => AsyncIterableIterator<DataMessage<TData, TUnfinalized>>,
+    ) => Promise<TResult>
 }
 
 export type DataTargetFactory<TData extends Data, TUnfinalized extends boolean, TResult = unknown> = (
@@ -172,13 +188,12 @@ export function pipeline<TData extends Data, TUnfinalized extends boolean>(
                     return {
                         unfinalized: duplex.source.unfinalized,
                         ref: duplex.source.ref,
-                        reader: async (opts) => {
-                            const reader = await duplex.source.reader(opts)
-
+                        read: (opts) => {
                             const pipePromise = pipe(source, duplex.target).catch((err) => {
                                 throw err
                             })
 
+                            const reader = duplex.source.read(opts)
                             return {
                                 next: async () => {
                                     const result = await reader.next()
@@ -196,6 +211,9 @@ export function pipeline<TData extends Data, TUnfinalized extends boolean>(
                                     const result = await reader.throw?.(err)
                                     await pipePromise
                                     return result ? result : {done: true, value: undefined}
+                                },
+                                [Symbol.asyncIterator]() {
+                                    return this
                                 },
                             }
                         },
@@ -215,22 +233,32 @@ export function pipeline<TData extends Data, TUnfinalized extends boolean>(
         [Symbol.asyncIterator](opts?: DataReaderOptions<TData>) {
             const offset = opts?.offset
 
-            let reader: DataReader<TData> | undefined
+            let reader: AsyncIterableIterator<DataMessage<TData, TUnfinalized>> | undefined
             return {
                 next: async () => {
                     if (!reader) {
                         const source = await sourceFactory()
-                        reader = await source.reader({offset})
+                        reader = source.read({offset})
                     }
-                    return reader.next()
+                    const result = await reader.next()
+                    if (result.done) {
+                        return {done: true, value: undefined}
+                    }
+
+                    switch (result.value.type) {
+                        case 'batch':
+                            return {value: result.value.batch, done: false}
+                        case 'fork':
+                            throw new ForkException(result.value.fork)
+                    }
                 },
                 return: async () => {
-                    let result = await reader?.return?.()
-                    return result ? result : {done: true, value: undefined}
+                    await reader?.return?.()
+                    return {done: true, value: undefined}
                 },
                 throw: async (err) => {
-                    let result = await reader?.throw?.(err)
-                    return result ? result : {done: true, value: undefined}
+                    await reader?.throw?.(err)
+                    throw err
                 },
                 [Symbol.asyncIterator]() {
                     return this
