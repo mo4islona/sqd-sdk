@@ -26,13 +26,12 @@ export interface DataReader<TData extends Data> extends AsyncIterator<DataBatch<
 
 export interface DataFactoryOptions<TData extends Data, TUnfinalized extends boolean> {
     unfinalized: TUnfinalized
-    ref: DataRef<TData['id']>
 }
 
 export interface DataSource<T extends Data, TUnfinalized extends boolean, TRequest> {
     unfinalized: TUnfinalized
     ref: DataRef<T['id']>
-    read: (opts: DataReadOptions<T, TRequest>) => AsyncIterableIterator<DataMessage<T, TUnfinalized>>
+    read: (opts: DataReadOptions<T, TRequest>) => AsyncIterable<DataMessage<T, TUnfinalized>>
 }
 
 export type DataSourceFactory<TData extends Data, TUnfinalized extends boolean, TRequest> = () => DataSource<
@@ -88,7 +87,7 @@ export interface DataTarget<TData extends Data, TUnfinalized extends boolean, TR
 }
 
 export type DataTargetFactory<TData extends Data, TUnfinalized extends boolean, TRequest, TResult> = (
-    opts: DataFactoryOptions<TData, TUnfinalized>,
+    opts: DataFactoryOptions<TData, boolean>,
 ) => DataTarget<TData, TUnfinalized, TRequest, TResult>
 
 export function createTarget<TData extends Data, TUnfinalized extends boolean, TRequest, TResult>(
@@ -110,8 +109,8 @@ export type DataDuplex<
     TOutputData extends Data,
     TInputUnfinalized extends boolean,
     TOutputUnfinalized extends boolean,
-    TInputRequest = never,
-    TOutputRequest = never,
+    TInputRequest,
+    TOutputRequest,
 > = DataTarget<
     TInputData,
     TInputUnfinalized,
@@ -124,8 +123,8 @@ export type DataDuplexFactory<
     TOutputData extends Data,
     TInputUnfinalized extends boolean,
     TOutputUnfinalized extends boolean,
-    TInputRequest = never,
-    TOutputRequest = never,
+    TInputRequest,
+    TOutputRequest,
 > = (
     opts: DataFactoryOptions<TInputData, TInputUnfinalized>,
 ) => DataDuplex<TInputData, TOutputData, TInputUnfinalized, TOutputUnfinalized, TInputRequest, TOutputRequest>
@@ -151,36 +150,9 @@ export function stream<TData extends Data, TUnfinalized extends boolean, TReques
     sourceFactory: () => DataSource<TData, TUnfinalized, TRequest>,
 ): DataStream<TData, TUnfinalized, TRequest> {
     return {
-        // pipeThrough: (duplexFactory) => {
-        //     return pipeline(
-        //         createSource(async () => {
-        //             const source = await sourceFactory()
-        //             const duplex = await duplexFactory({
-        //                 unfinalized: source.unfinalized,
-        //                 ref: source.ref,
-        //             })
-
-        //             return {
-        //                 unfinalized: duplex.source.unfinalized,
-        //                 ref: duplex.source.ref,
-        //                 read: async function* (opts) {
-        //                     const pipePromise = pipe(source, duplex.target).catch((err) => {
-        //                         throw err
-        //                     })
-        //                     yield* duplex.source.read(opts)
-
-        //                     await pipePromise
-        //                 },
-        //             }
-        //         }),
-        //     )
-        // },
         pipe: (targetFactory) => {
             const source = sourceFactory()
-            const target = targetFactory({
-                unfinalized: source.unfinalized,
-                ref: source.ref,
-            })
+            const target = targetFactory({unfinalized: source.unfinalized})
 
             return pipe(source, target)
         },
@@ -289,28 +261,6 @@ function pipe<TData extends Data, TRequest = never, TResult = unknown>(
                     default: {
                         throw unexpectedCase((message as any).type)
                     }
-                }
-            }
-        },
-    })
-}
-
-function reader<TData extends Data, TRequest>(
-    source: DataSource<TData, boolean, TRequest>,
-    opts: DataReadOptions<TData, TRequest>,
-) {
-    return createTarget({
-        unfinalized: source.unfinalized,
-        write: async function* (streamOpts) {
-            for await (const message of source.read(opts)) {
-                switch (message.type) {
-                    case 'batch':
-                        yield* message.value.data.map((item) => item.value)
-                        break
-                    case 'fork':
-                        throw new ForkException(message.value)
-                    default:
-                        throw unexpectedCase((message as any).type)
                 }
             }
         },

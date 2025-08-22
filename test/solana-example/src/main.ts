@@ -2,6 +2,7 @@ import {HttpClient} from '@sqd-sdk/core/http-client'
 import {assert} from '@sqd-sdk/core/internal/misc'
 import {createLogger} from '@sqd-sdk/core/logger'
 import {
+    createFinalizer,
     createTarget,
     createTransformer,
     handleMessage,
@@ -76,6 +77,7 @@ async function main() {
             },
         }),
     )
+        //.pipe(createFinalizer())
         .pipe(createProgressTracker('solana'))
         .pipe(
             createTypeormTarget({}, async (store, batch) => {
@@ -107,8 +109,8 @@ async function main() {
                                 (tb) => tb.account === destTransfer.accounts.source,
                             )?.preMint
 
-                            assert(srcMint)
-                            assert(destMint)
+                            assert(srcMint != null)
+                            assert(destMint != null)
 
                             exchange.fromToken = srcMint
                             exchange.fromOwner = srcBalance?.preOwner || srcTransfer.accounts.source
@@ -138,7 +140,7 @@ function createProgressTracker<
 
     return createTransformer((opts) => {
         return {
-            unfinalized: opts.unfinalized,
+            unfinalized: opts.unfinalized as TUnfinalized,
             ref: opts.ref,
             transform: async function* (transformOpts) {
                 if (transformOpts.offset) {

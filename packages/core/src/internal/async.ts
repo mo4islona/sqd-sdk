@@ -159,7 +159,7 @@ export class AsyncQueue<T> {
     }
 }
 
-export class SyncQueue<T> {
+export class SyncQueue<T> implements AsyncIterable<T> {
     private pendingPuts: Array<{
         value: T
         resolve: () => void
@@ -229,12 +229,32 @@ export class SyncQueue<T> {
         }
         this.pendingTakes.length = 0
     }
+
+    [Symbol.asyncIterator](): AsyncIterableIterator<T> {
+        return {
+            next: async () => {
+                const value = await this.take()
+                return value ? {done: false, value} : {done: true, value: undefined}
+            },
+            return: async () => {
+                this.close()
+                return {done: true, value: undefined}
+            },
+            throw: async (error) => {
+                this.close()
+                throw error
+            },
+            [Symbol.asyncIterator]() {
+                return this
+            },
+        }
+    }
 }
 
 export async function* concurrentMap<T, R>(
     concurrency: number,
     stream: AsyncIterable<T>,
-    f: (val: T) => Promise<R>
+    f: (val: T) => Promise<R>,
 ): AsyncIterable<R> {
     let queue = new AsyncQueue<{promise: Promise<R>}>(concurrency)
 
@@ -252,7 +272,7 @@ export async function* concurrentMap<T, R>(
             let promise = Promise.reject(err)
             promise.catch(() => {}) // prevent unhandled rejection crashes
             queue.tryPut({promise})
-        }
+        },
     )
 
     for await (let item of queue.iterate()) {
@@ -262,7 +282,7 @@ export async function* concurrentMap<T, R>(
 
 export async function* concurrentWriter<T>(
     watermark: number,
-    cb: (write: (val: T) => Promise<void>) => Promise<void>
+    cb: (write: (val: T) => Promise<void>) => Promise<void>,
 ): AsyncIterable<T> {
     assert(watermark >= 1)
 
@@ -274,7 +294,7 @@ export async function* concurrentWriter<T>(
             if (!queue.isClosed()) {
                 queue.forcePut(ensureError(err))
             }
-        }
+        },
     )
 
     for await (let valueOrError of queue.iterate()) {

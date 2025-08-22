@@ -118,7 +118,7 @@ export class PortalClient {
         this.headPollInterval = options.headPollInterval ?? 0
         this.minBytes = options.minBytes ?? 10 * 1024 * 1024
         this.maxBytes = options.maxBytes ?? this.minBytes
-        this.maxIdleTime = options.maxIdleTime ?? 300
+        this.maxIdleTime = options.maxIdleTime ?? 500
         this.maxWaitTime = options.maxWaitTime ?? 5_000
     }
 
@@ -311,6 +311,8 @@ function createPortalStream<Q extends Query>(
 
                 await buffer.put({blocks, finalizedHead, meta: {bytes}})
             }
+
+            buffer.flush()
 
             return ingest()
         } catch (err) {

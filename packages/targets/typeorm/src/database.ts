@@ -144,7 +144,7 @@ export class TypeormDatabase {
             }
 
             if (unfinalizedIndex < 0) {
-                const finalizedRef = batch.data[batch.data.length - 1].id
+                const finalizedRef = maybeLast(batch.data)?.id ?? state
 
                 await this.deleteHotBlocks(em, finalizedRef.number)
                 await this.performUpdates((store) => cb(store, 0, batch.data.length), em)

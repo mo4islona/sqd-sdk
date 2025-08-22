@@ -1,17 +1,15 @@
 import type {Data, DataRef} from '../data'
-import type {
-    DataDuplex,
-    DataDuplexFactory,
-    DataFactoryOptions,
-    DataReadOptions,
-    DataMessage,
-    DataWriteOptions,
-    DataTarget,
-    DataSource,
-    DataStream,
-} from '../core'
+import type {DataDuplexFactory, DataFactoryOptions, DataReadOptions, DataMessage, DataWriteOptions} from '../core'
 import {createSource, createTarget, stream} from '../core'
-import {createFuture, SyncQueue, type Future} from '../../internal/async'
+
+export interface DataTransformOptions<
+    TInputData extends Data,
+    TOutputData extends Data,
+    TUnfinalized extends boolean,
+    TInputRequest,
+    TOutputRequest,
+> extends DataReadOptions<TOutputData, TOutputRequest>,
+        DataWriteOptions<TInputData, TUnfinalized, TInputRequest> {}
 
 export interface DataTransformer<
     TInputData extends Data,
@@ -23,7 +21,7 @@ export interface DataTransformer<
     unfinalized: TUnfinalized
     ref: DataRef<TOutputData['id']>
     transform: (
-        opts: DataReadOptions<TOutputData, TOutputRequest> & DataWriteOptions<TInputData, TUnfinalized, TInputRequest>,
+        opts: DataTransformOptions<TInputData, TOutputData, TUnfinalized, TInputRequest, TOutputRequest>,
     ) => AsyncIterableIterator<DataMessage<TOutputData, TUnfinalized>>
 }
 
@@ -34,7 +32,7 @@ export type DataTransformerFactory<
     TInputRequest,
     TOutputRequest,
 > = (
-    opts: DataFactoryOptions<TInputData, TUnfinalized>,
+    opts: DataFactoryOptions<TInputData, boolean> & {ref: DataRef<TOutputData['id']>},
 ) => DataTransformer<TInputData, TOutputData, TUnfinalized, TInputRequest, TOutputRequest>
 
 export function createTransformer<
@@ -44,78 +42,30 @@ export function createTransformer<
     TInputRequest,
     TOutputRequest,
 >(
-    transformerOrFactory:
-        | DataTransformer<TInputData, TOutputData, TUnfinalized, TInputRequest, TOutputRequest>
-        | DataTransformerFactory<TInputData, TOutputData, TUnfinalized, TInputRequest, TOutputRequest>,
+    transformerFactory: DataTransformerFactory<TInputData, TOutputData, TUnfinalized, TInputRequest, TOutputRequest>,
 ): DataDuplexFactory<TInputData, TOutputData, TUnfinalized, TUnfinalized, TInputRequest, TOutputRequest> {
-    return (opts) => {
-        if (typeof transformerOrFactory === 'function') {
-            const transformer = transformerOrFactory(opts)
-            return createTransformer(transformer)(opts)
-        }
-
-        const target = createTarget<
-            TInputData,
-            TUnfinalized,
-            TInputRequest,
-            DataStream<TOutputData, TUnfinalized, TOutputRequest>
-        >({
-            unfinalized: opts.unfinalized,
+    return createTarget((opts) => {
+        return {
+            unfinalized: opts.unfinalized as TUnfinalized,
             write: (writeOpts) => {
-                const queue = new SyncQueue<DataMessage<TOutputData, TUnfinalized>>()
-                let readOptsFuture: Future<DataReadOptions<TOutputData, TOutputRequest>> = createFuture()
-
+                const transformer = transformerFactory({
+                    ref: writeOpts.ref,
+                    unfinalized: opts.unfinalized,
+                })
                 return stream(
-                    createSource<TOutputData, TUnfinalized, TOutputRequest>({
-                        unfinalized: transformerOrFactory.unfinalized,
-                        ref: transformerOrFactory.ref,
-                        read: (readOpts) => {
-                            Promise.resolve()
-                                .then(async () => {
-                                    try {
-                                        for await (const message of transformerOrFactory.transform({
-                                            ...writeOpts,
-                                            ...readOpts,
-                                        })) {
-                                            await queue.put(message)
-                                            if (queue.isClosed) break
-                                        }
-                                    } finally {
-                                        queue.close()
-                                    }
-                                })
-                                .catch((e) => {
-                                    throw e
-                                })
-
-                            return {
-                                next: async () => {
-                                    const message = await queue.take()
-                                    if (message) {
-                                        return {done: false, value: message}
-                                    }
-                                    return {done: true, value: undefined}
-                                },
-                                return: async () => {
-                                    queue.close()
-                                    readOptsFuture = createFuture()
-                                    return {done: true, value: undefined}
-                                },
-                                throw: async (error) => {
-                                    queue.close()
-                                    readOptsFuture = createFuture()
-                                    throw error
-                                },
-                                [Symbol.asyncIterator]() {
-                                    return this
-                                },
-                            }
-                        },
+                    createSource({
+                        unfinalized: transformer.unfinalized,
+                        ref: transformer.ref,
+                        read: (readOpts) =>
+                            transformer.transform({
+                                offset: readOpts.offset,
+                                request: readOpts.request,
+                                ref: writeOpts.ref,
+                                read: writeOpts.read,
+                            }),
                     }),
                 )
             },
-        })
-
-        return target(opts)
-    }
+        }
+    })
 }
