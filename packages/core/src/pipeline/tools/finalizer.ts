@@ -5,7 +5,7 @@ import {maybeLast} from '../../internal/misc'
 
 interface BatchProcessingResult<TData extends Data> {
     buffer: TData[]
-    batch?: DataBatch<TData>
+    batch?: DataBatch<TData, false>
 }
 
 function findRollbackIndex<TId>(currentChain: TId[], forkChain: TId[], ref: DataRef<TId>): number {
@@ -169,7 +169,7 @@ export function createFinalizer<TData extends Data, TRequest>(): DataDuplexFacto
                             switch (message.type) {
                                 case 'batch': {
                                     const result = handleBatch({
-                                        batch: message.value,
+                                        batch: message,
                                         buffer,
                                         ref: writeOptions.ref,
                                         finalizedId,
@@ -179,15 +179,15 @@ export function createFinalizer<TData extends Data, TRequest>(): DataDuplexFacto
 
                                     if (result.batch) {
                                         yield {
+                                            ...result.batch,
                                             type: 'batch',
-                                            value: result.batch,
                                         }
                                     }
                                     break
                                 }
                                 case 'fork': {
                                     const result = handleFork({
-                                        fork: message.value,
+                                        fork: message,
                                         buffer,
                                         finalizedId,
                                         ref: writeOptions.ref,

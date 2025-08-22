@@ -32,7 +32,7 @@ export type DataTransformerFactory<
     TInputRequest,
     TOutputRequest,
 > = (
-    opts: DataFactoryOptions<TInputData, boolean> & {ref: DataRef<TOutputData['id']>},
+    opts: DataFactoryOptions<boolean> & {ref: DataRef<TOutputData['id']>},
 ) => DataTransformer<TInputData, TOutputData, TUnfinalized, TInputRequest, TOutputRequest>
 
 export function createTransformer<

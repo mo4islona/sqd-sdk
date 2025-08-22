@@ -1,15 +1,7 @@
 import {HttpClient} from '@sqd-sdk/core/http-client'
 import {assert} from '@sqd-sdk/core/internal/misc'
 import {createLogger} from '@sqd-sdk/core/logger'
-import {
-    createFinalizer,
-    createTarget,
-    createTransformer,
-    handleMessage,
-    stream,
-    type Data,
-    type DataDuplexFactory,
-} from '@sqd-sdk/core/pipeline'
+import {createTransformer, stream, type Data, type DataDuplexFactory} from '@sqd-sdk/core/pipeline'
 import {PortalClient} from '@sqd-sdk/core/portal'
 import {solanaPortalDataSource} from '@sqd-sdk/solana-stream'
 import {createTypeormTarget} from '@sqd-sdk/typeorm-store/lib/database'
@@ -153,12 +145,12 @@ function createProgressTracker<
                 })) {
                     switch (message.type) {
                         case 'batch':
-                            if (message.value.data.length > 0) {
-                                const {offset, head, finalizedHead, data} = message.value
+                            if (message.data.length > 0) {
+                                const {offset, head, finalizedHead, data} = message
                                 logger.info(
                                     [
                                         `progress: ${offset.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
-                                        `blocks: ${message.value.data.length}, lag: ${(
+                                        `blocks: ${message.data.length}, lag: ${(
                                             (Date.now() - data[data.length - 1].value.header.timestamp * 1000) / 1000
                                         ).toFixed(2)}s`,
                                     ].join(', '),
@@ -166,7 +158,7 @@ function createProgressTracker<
                             }
                             break
                         case 'fork':
-                            logger.info(`fork: ${message.value.heads[message.value.heads.length - 1].number}`)
+                            logger.info(`fork: ${message.heads[message.heads.length - 1].number}`)
                             break
                     }
 

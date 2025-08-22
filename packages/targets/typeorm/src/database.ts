@@ -322,7 +322,7 @@ export function createTypeormTarget<TValue>(
                     for await (const message of read({offset})) {
                         switch (message.type) {
                             case 'batch': {
-                                const batch = message.value
+                                const batch = message
                                 await db.transact(batch, (store, sliceBeg, sliceEnd) =>
                                     handler(
                                         store,
@@ -332,11 +332,8 @@ export function createTypeormTarget<TValue>(
                                 break
                             }
                             case 'fork': {
-                                const offset = await db.fork(message.value)
+                                const offset = await db.fork(message)
                                 return process(offset)
-                            }
-                            default: {
-                                throw unexpectedCase((message as any).type)
                             }
                         }
                     }
@@ -351,16 +348,32 @@ export function createTypeormTarget<TValue>(
 }
 
 function findRollbackIndex(chainA: HashAndHeight[], chainB: HashAndHeight[]) {
-    let i = 0
-    let j = 0
-    for (; i < chainA.length; i++) {
-        const blockA = chainA[i]
-        for (; j < chainB.length; j++) {
-            let blockB = chainB[j]
-            if (blockB.number > blockA.number) break
-            if (blockB.number === blockA.number && blockB.hash !== blockA.hash) return i - 1
+    let aIndex = 0
+    let bIndex = 0
+    let lastCommonIndex = -1
+
+    while (aIndex < chainA.length && bIndex < chainB.length) {
+        const blockA = chainA[aIndex]
+        const blockB = chainB[bIndex]
+
+        if (blockA.number < blockB.number) {
+            aIndex++
+            continue
         }
-        if (j === chainB.length) return i - 1
+
+        if (blockA.number > blockB.number) {
+            bIndex++
+            continue
+        }
+
+        if (blockA.number === blockB.number && blockA.hash !== blockB.hash) {
+            return lastCommonIndex
+        }
+
+        lastCommonIndex = aIndex
+        aIndex++
+        bIndex++
     }
-    return i - 1
+
+    return lastCommonIndex
 }

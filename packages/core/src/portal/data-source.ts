@@ -69,19 +69,17 @@ export function portalDataSource<TQuery extends Query>(
 
                 yield {
                     type: 'batch',
-                    value: {
-                        offset,
-                        head,
-                        finalizedHead,
-                        data,
-                    },
+                    offset,
+                    head,
+                    finalizedHead,
+                    data,
                 }
             }
         } catch (err) {
             if (isForkException(err)) {
                 yield {
                     type: 'fork',
-                    value: {heads: err.lastBlocks},
+                    heads: err.lastBlocks,
                 }
             }
             throw err

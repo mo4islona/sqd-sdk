@@ -51,9 +51,9 @@ export type Data<TValue = unknown, TId = unknown> = {
 
 export type DataId<TData extends Data> = TData['id']
 
-export interface DataBatch<TData extends Data> {
+export interface DataBatch<TData extends Data, TUnfinalized extends boolean = boolean> {
     readonly data: TData[]
-    readonly finalizedHead: DataId<TData> | undefined
+    readonly finalizedHead: TUnfinalized extends false ? DataId<TData> : DataId<TData> | undefined
     readonly head: DataId<TData>
     readonly offset: DataId<TData>
 }

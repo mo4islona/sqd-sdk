@@ -1,30 +1,30 @@
-import {ForkException, isForkException} from './errors'
+import {ForkException} from './errors'
 import type {Data, DataBatch, DataFork, DataRef} from './data'
-import type {Awaitable, Maybe} from '../internal/types'
+import type {Maybe} from '../internal/types'
 import {unexpectedCase} from '../internal/misc'
 
-export interface DataBatchMessage<TData extends Data> {
+export interface DataBatchMessage<TData extends Data, TUnfinalized extends boolean>
+    extends DataBatch<TData, TUnfinalized> {
     type: 'batch'
-    value: DataBatch<TData>
 }
 
-export interface DataForkMessage<TData extends Data> {
+export interface DataForkMessage<TData extends Data> extends DataFork<TData['id']> {
     type: 'fork'
-    value: DataFork<TData['id']>
 }
 
 export type DataMessage<TData extends Data, TUnfinalized extends boolean> = TUnfinalized extends false
-    ? DataBatchMessage<TData>
-    : DataBatchMessage<TData> | DataForkMessage<TData>
+    ? DataBatchMessage<TData, TUnfinalized>
+    : DataBatchMessage<TData, TUnfinalized> | DataForkMessage<TData>
 
 export interface DataReadOptions<TData extends Data, TRequest> {
     offset: Maybe<TData['id']>
     request?: TRequest
 }
 
-export interface DataReader<TData extends Data> extends AsyncIterator<DataBatch<TData>> {}
+export interface DataReader<TData extends Data, TUnfinalized extends boolean>
+    extends AsyncIterator<DataBatch<TData, TUnfinalized>> {}
 
-export interface DataFactoryOptions<TData extends Data, TUnfinalized extends boolean> {
+export interface DataFactoryOptions<TUnfinalized extends boolean> {
     unfinalized: TUnfinalized
 }
 
@@ -45,34 +45,10 @@ export function createSource<TData extends Data, TUnfinalized extends boolean, T
 ): DataSourceFactory<TData, TUnfinalized, TRequest> {
     return () => {
         if (typeof sourceOrFactory === 'function') {
-            return sourceOrFactory()
+            sourceOrFactory = sourceOrFactory()
         }
 
-        return {
-            ...sourceOrFactory,
-            // [Symbol.asyncIterator]: (opts: DataReaderOptions<TData>) => {
-            //     let reader: DataReader<TData> | undefined
-            //     return {
-            //         next: async () => {
-            //             if (!reader) {
-            //                 reader = await source.reader(opts)
-            //             }
-            //             return reader.next()
-            //         },
-            //         return: async () => {
-            //             const result = await reader?.return?.()
-            //             return result ? result : {done: true, value: undefined}
-            //         },
-            //         throw: async (err: any) => {
-            //             await reader?.return?.().catch(() => {})
-            //             throw err
-            //         },
-            //         [Symbol.asyncIterator]() {
-            //             return this
-            //         },
-            //     }
-            // },
-        }
+        return sourceOrFactory
     }
 }
 
@@ -87,7 +63,7 @@ export interface DataTarget<TData extends Data, TUnfinalized extends boolean, TR
 }
 
 export type DataTargetFactory<TData extends Data, TUnfinalized extends boolean, TRequest, TResult> = (
-    opts: DataFactoryOptions<TData, boolean>,
+    opts: DataFactoryOptions<TUnfinalized>,
 ) => DataTarget<TData, TUnfinalized, TRequest, TResult>
 
 export function createTarget<TData extends Data, TUnfinalized extends boolean, TRequest, TResult>(
@@ -126,7 +102,7 @@ export type DataDuplexFactory<
     TInputRequest,
     TOutputRequest,
 > = (
-    opts: DataFactoryOptions<TInputData, TInputUnfinalized>,
+    opts: DataFactoryOptions<TInputUnfinalized>,
 ) => DataDuplex<TInputData, TOutputData, TInputUnfinalized, TOutputUnfinalized, TInputRequest, TOutputRequest>
 
 export interface DataPipeOptions<TData extends Data, TRequest> {
@@ -139,7 +115,7 @@ export interface DataPipeOptions<TData extends Data, TRequest> {
 export interface DataStream<TData extends Data, TUnfinalized extends boolean, TRequest = never> {
     pipe<TResult>(
         targetFactory: (
-            opts: DataFactoryOptions<TData, TUnfinalized>,
+            opts: DataFactoryOptions<TUnfinalized>,
         ) => DataTarget<TData, TUnfinalized extends true ? true : boolean, TRequest, TResult>,
         opts?: DataPipeOptions<TData, TRequest>,
     ): TResult
@@ -150,11 +126,11 @@ export function stream<TData extends Data, TUnfinalized extends boolean, TReques
     sourceFactory: () => DataSource<TData, TUnfinalized, TRequest>,
 ): DataStream<TData, TUnfinalized, TRequest> {
     return {
-        pipe: (targetFactory) => {
+        pipe: (targetFactory, opts = {}) => {
             const source = sourceFactory()
             const target = targetFactory({unfinalized: source.unfinalized})
 
-            return pipe(source, target)
+            return pipe(source, target, opts)
         },
         [Symbol.asyncIterator]: (opts?: DataReadOptions<TData, TRequest>) => {
             const source = sourceFactory()
@@ -166,10 +142,10 @@ export function stream<TData extends Data, TUnfinalized extends boolean, TReques
                         for await (const message of streamOpts.read(opts ?? {offset: undefined, request: undefined})) {
                             switch (message.type) {
                                 case 'batch':
-                                    yield* message.value.data.map((item) => item.value)
+                                    yield* message.data.map((item) => item.value)
                                     break
                                 case 'fork':
-                                    throw new ForkException(message.value)
+                                    throw new ForkException(message)
                                 default:
                                     throw unexpectedCase((message as any).type)
                             }
@@ -188,7 +164,7 @@ export function stream<TData extends Data, TUnfinalized extends boolean, TReques
 function pipe<TData extends Data, TRequest = never, TResult = unknown>(
     source: DataSource<TData, boolean, TRequest>,
     target: DataTarget<TData, boolean, TRequest, TResult>,
-    opts: DataPipeOptions<TData, TRequest> = {validateBatches: true},
+    opts: DataPipeOptions<TData, TRequest>,
 ): TResult {
     if (source.unfinalized && !target.unfinalized) {
         throw new TypeError('Cannot pipe from unfinalized DataSource to finalized DataTarget')
@@ -202,7 +178,12 @@ function pipe<TData extends Data, TRequest = never, TResult = unknown>(
             for await (const message of source.read(streamOpts)) {
                 switch (message.type) {
                     case 'batch': {
-                        const batch = message.value
+                        const batch = message
+
+                        if (!source.unfinalized && !batch.finalizedHead) {
+                            throw new TypeError('Finalized source data must have a finalized head')
+                        }
+
                         if (opts.validateBatches) {
                             if (offset && !source.ref.compare(batch.offset, offset).isGreaterOrEqual) {
                                 throw new Error('New offset is below the previous offset')
@@ -212,11 +193,14 @@ function pipe<TData extends Data, TRequest = never, TResult = unknown>(
                                 throw new Error('Head is below the offset')
                             }
 
-                            if (
-                                batch.finalizedHead &&
-                                !source.ref.compare(batch.head, batch.finalizedHead).isGreaterOrEqual
-                            ) {
-                                throw new Error('Head is below the finalized head')
+                            if (!source.unfinalized) {
+                                if (!source.ref.compare(batch.head, batch.finalizedHead).isEqual) {
+                                    throw new Error('Head is not equal to the finalized head')
+                                }
+                            } else if (batch.finalizedHead) {
+                                if (!source.ref.compare(batch.head, batch.finalizedHead).isGreaterOrEqual) {
+                                    throw new Error('Head is below the finalized head')
+                                }
                             }
 
                             let lastRef = offset
@@ -238,10 +222,6 @@ function pipe<TData extends Data, TRequest = never, TResult = unknown>(
 
                         offset = batch.offset
 
-                        yield {
-                            type: 'batch',
-                            value: batch,
-                        }
                         break
                     }
                     case 'fork': {
@@ -252,54 +232,15 @@ function pipe<TData extends Data, TRequest = never, TResult = unknown>(
                             throw new TypeError('Got fork message for finalized DataTarget')
                         }
 
-                        yield {
-                            type: 'fork',
-                            value: message.value,
-                        }
                         break
                     }
                     default: {
                         throw unexpectedCase((message as any).type)
                     }
                 }
+
+                yield message
             }
         },
     })
-}
-
-export type DataMessageHandlers<TMessage extends DataMessage<any, any>> = {
-    [K in TMessage['type']]: (message: Extract<TMessage, {type: K}>['value']) => any
-}
-
-export type DataMessageHandlersReturnType<THandlers extends DataMessageHandlers<any>> = {
-    [K in keyof THandlers]: THandlers[K] extends (...args: any) => any ? ReturnType<THandlers[K]> : never
-}[keyof THandlers]
-
-export function handleMessage<
-    TMessage extends DataMessage<any, any>,
-    THandlers extends DataMessageHandlers<TMessage> = DataMessageHandlers<TMessage>,
->(message: TMessage, handlers: THandlers): DataMessageHandlersReturnType<THandlers> {
-    switch (message.type) {
-        case 'batch': {
-            if (!('batch' in handlers)) {
-                throw new TypeError('Got batch message but batch handler is not defined')
-            }
-            if (typeof handlers.batch !== 'function') {
-                throw new TypeError('Batch handler is not a function')
-            }
-            return handlers.batch(message.value)
-        }
-        case 'fork': {
-            if (!('fork' in handlers)) {
-                throw new TypeError('Got fork message but fork handler is not defined')
-            }
-            if (typeof handlers.fork !== 'function') {
-                throw new TypeError('Fork handler is not a function')
-            }
-            return handlers.fork?.(message.value)
-        }
-        default: {
-            throw unexpectedCase((message as any).type)
-        }
-    }
 }

@@ -1,5 +1,5 @@
 import {applyRangeBound, mergeRangeRequests} from '@sqd-sdk/core/internal/range/index'
-import {type Data, createSource, type DataSourceFactory, type DataMessage, handleMessage} from '@sqd-sdk/core/pipeline'
+import {type Data, createSource, type DataSourceFactory, type DataMessage} from '@sqd-sdk/core/pipeline'
 import {
     type Block,
     blockFromPartial,
@@ -52,30 +52,27 @@ export function solanaPortalDataSource<F extends FieldSelection>(
             })()
 
             for await (const message of portalSource.read({offset})) {
-                yield handleMessage(message, {
-                    batch: (batch) => {
-                        return {
-                            type: 'batch' as const,
-                            value: {
-                                data: batch.data.map(
-                                    (i): SolanaPortalData<F> => ({
-                                        value: mapBlock(i.value, fields),
-                                        id: i.id,
-                                    }),
-                                ),
-                                finalizedHead: batch.finalizedHead,
-                                head: batch.head,
-                                offset: batch.offset,
-                            },
+                switch (message.type) {
+                    case 'batch': {
+                        yield {
+                            type: 'batch',
+                            data: message.data.map(
+                                (i): SolanaPortalData<F> => ({
+                                    value: mapBlock(i.value, fields),
+                                    id: i.id,
+                                }),
+                            ),
+                            finalizedHead: message.finalizedHead,
+                            head: message.head,
+                            offset: message.offset,
                         }
-                    },
-                    fork: (fork) => {
-                        return {
-                            type: 'fork' as const,
-                            value: {heads: fork.heads},
-                        }
-                    },
-                })
+                        break
+                    }
+                    case 'fork': {
+                        yield message
+                        break
+                    }
+                }
             }
         }
     }
