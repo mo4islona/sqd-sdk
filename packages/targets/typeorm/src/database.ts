@@ -309,7 +309,7 @@ export function createTypeormTarget<TValue>(
     databaseOpts: TypeormDatabaseOptions,
     handler: (store: Store, batch: TValue[]) => Promise<void>,
 ) {
-    return createTarget<Data<TValue, HashAndHeight>, true>(async (opts) => {
+    return createTarget<Data<TValue, HashAndHeight>, true, never, Promise<void>>(() => {
         return {
             unfinalized: true,
             write: async ({ref, read}) => {

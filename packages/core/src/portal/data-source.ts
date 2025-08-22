@@ -31,7 +31,7 @@ export type PortalData<TQuery extends Query> = Data<GetBlock<TQuery>, BlockRef>
 
 export function portalDataSource<TQuery extends Query>(
     options: PortalDataSourceOptions<TQuery>,
-): DataSourceFactory<PortalData<TQuery>, true> {
+): DataSourceFactory<PortalData<TQuery>, true, never> {
     const portal = options.portal instanceof PortalClient ? options.portal : new PortalClient(options.portal)
     const headThrottler = new Throttler(async () => portal.getHead(), 5_000)
 

@@ -21,26 +21,26 @@ import {type MergeSelection, mergeSelection} from '@sqd-sdk/core/internal/select
 
 type GetFields<F extends FieldSelection> = MergeSelection<RequiredFieldSelection, F>
 
-export interface SolanaPortalDataReaderOptions<Q extends SolanaQueryOptions> {
+export interface SolanaPortalDataReaderOptions<F extends FieldSelection> {
     portal: PortalClientOptions | PortalClient
-    query: Q
+    query: SolanaQueryOptions<F>
 }
 
-export type SolanaPortalData<Q extends SolanaQueryOptions> = Data<Block<GetFields<Q['fields']>>, BlockRef>
+export type SolanaPortalData<F extends FieldSelection> = Data<Block<GetFields<F>>, BlockRef>
 
-export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
-    options: SolanaPortalDataReaderOptions<Q>,
-): DataSourceFactory<SolanaPortalData<Q>, true> {
+export function solanaPortalDataSource<F extends FieldSelection>(
+    options: SolanaPortalDataReaderOptions<F>,
+): DataSourceFactory<SolanaPortalData<F>, true, never> {
     const fields = getFields(options.query.fields)
     const requests = mergeRangeRequests(options.query.requests, mergeDataRequests)
 
     const createDataStream = async function* (
         offset?: BlockRef,
-    ): AsyncIterableIterator<DataMessage<SolanaPortalData<Q>, true>> {
+    ): AsyncIterableIterator<DataMessage<SolanaPortalData<F>, true>> {
         const requestsBounded = offset ? applyRangeBound(requests, {from: offset.number + 1}) : requests
 
         for (const request of requestsBounded) {
-            const portalSource = await portalDataSource({
+            const portalSource = portalDataSource({
                 portal: options.portal,
                 query: {
                     type: 'solana' as const,
@@ -58,7 +58,7 @@ export function solanaPortalDataSource<Q extends SolanaQueryOptions>(
                             type: 'batch' as const,
                             value: {
                                 data: batch.data.map(
-                                    (i): SolanaPortalData<Q> => ({
+                                    (i): SolanaPortalData<F> => ({
                                         value: mapBlock(i.value, fields),
                                         id: i.id,
                                     }),

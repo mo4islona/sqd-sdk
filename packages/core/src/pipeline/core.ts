@@ -17,7 +17,7 @@ export type DataMessage<TData extends Data, TUnfinalized extends boolean> = TUnf
     ? DataBatchMessage<TData>
     : DataBatchMessage<TData> | DataForkMessage<TData>
 
-export interface DataReadOptions<TData extends Data, TRequest = unknown> {
+export interface DataReadOptions<TData extends Data, TRequest> {
     offset: Maybe<TData['id']>
     request?: TRequest
 }
@@ -29,22 +29,24 @@ export interface DataFactoryOptions<TData extends Data, TUnfinalized extends boo
     ref: DataRef<TData['id']>
 }
 
-export interface DataSource<T extends Data, TUnfinalized extends boolean, TRequest = never> {
+export interface DataSource<T extends Data, TUnfinalized extends boolean, TRequest> {
     unfinalized: TUnfinalized
     ref: DataRef<T['id']>
     read: (opts: DataReadOptions<T, TRequest>) => AsyncIterableIterator<DataMessage<T, TUnfinalized>>
 }
 
-export type DataSourceFactory<TData extends Data, TUnfinalized extends boolean, TRequest = never> = () => Promise<
-    DataSource<TData, TUnfinalized, TRequest>
+export type DataSourceFactory<TData extends Data, TUnfinalized extends boolean, TRequest> = () => DataSource<
+    TData,
+    TUnfinalized,
+    TRequest
 >
 
-export function createSource<TData extends Data, TUnfinalized extends boolean, TRequest = never>(
+export function createSource<TData extends Data, TUnfinalized extends boolean, TRequest>(
     sourceOrFactory: DataSource<TData, TUnfinalized, TRequest> | DataSourceFactory<TData, TUnfinalized, TRequest>,
 ): DataSourceFactory<TData, TUnfinalized, TRequest> {
-    return async () => {
+    return () => {
         if (typeof sourceOrFactory === 'function') {
-            return await sourceOrFactory()
+            return sourceOrFactory()
         }
 
         return {
@@ -75,45 +77,47 @@ export function createSource<TData extends Data, TUnfinalized extends boolean, T
     }
 }
 
-export interface DataWriteOptions<TData extends Data, TUnfinalized extends boolean, TRequest = unknown> {
+export interface DataWriteOptions<TData extends Data, TUnfinalized extends boolean, TRequest> {
     ref: DataRef<TData['id']>
     read: (opts: DataReadOptions<TData, TRequest>) => AsyncIterableIterator<DataMessage<TData, TUnfinalized>>
 }
 
-export interface DataTarget<TData extends Data, TUnfinalized extends boolean, TRequest = never, TResult = unknown> {
+export interface DataTarget<TData extends Data, TUnfinalized extends boolean, TRequest, TResult> {
     unfinalized: TUnfinalized
-    write: (opts: DataWriteOptions<TData, TUnfinalized, TRequest>) => Promise<TResult>
+    write: (opts: DataWriteOptions<TData, TUnfinalized, TRequest>) => TResult
 }
 
-export type DataTargetFactory<TData extends Data, TUnfinalized extends boolean, TRequest = never, TResult = unknown> = (
+export type DataTargetFactory<TData extends Data, TUnfinalized extends boolean, TRequest, TResult> = (
     opts: DataFactoryOptions<TData, TUnfinalized>,
-) => Promise<DataTarget<TData, TUnfinalized, TRequest, TResult>>
+) => DataTarget<TData, TUnfinalized, TRequest, TResult>
 
-export function createTarget<TData extends Data, TUnfinalized extends boolean, TRequest = never, TResult = unknown>(
+export function createTarget<TData extends Data, TUnfinalized extends boolean, TRequest, TResult>(
     targetOrFactory:
         | DataTarget<TData, TUnfinalized, TRequest, TResult>
         | DataTargetFactory<TData, TUnfinalized, TRequest, TResult>,
 ): DataTargetFactory<TData, TUnfinalized, TRequest, TResult> {
-    return async (opts) => {
+    return (opts) => {
         if (typeof targetOrFactory === 'function') {
-            return await targetOrFactory(opts)
+            return targetOrFactory(opts)
         }
 
         return targetOrFactory
     }
 }
 
-export interface DataDuplex<
+export type DataDuplex<
     TInputData extends Data,
     TOutputData extends Data,
     TInputUnfinalized extends boolean,
     TOutputUnfinalized extends boolean,
     TInputRequest = never,
     TOutputRequest = never,
-> {
-    target: DataTarget<TInputData, TInputUnfinalized, TInputRequest, unknown>
-    source: DataSource<TOutputData, TOutputUnfinalized, TOutputRequest>
-}
+> = DataTarget<
+    TInputData,
+    TInputUnfinalized,
+    TInputRequest,
+    DataStream<TOutputData, TOutputUnfinalized, TOutputRequest>
+>
 
 export type DataDuplexFactory<
     TInputData extends Data,
@@ -124,7 +128,7 @@ export type DataDuplexFactory<
     TOutputRequest = never,
 > = (
     opts: DataFactoryOptions<TInputData, TInputUnfinalized>,
-) => Promise<DataDuplex<TInputData, TOutputData, TInputUnfinalized, TOutputUnfinalized, TInputRequest, TOutputRequest>>
+) => DataDuplex<TInputData, TOutputData, TInputUnfinalized, TOutputUnfinalized, TInputRequest, TOutputRequest>
 
 export interface DataPipeOptions<TData extends Data, TRequest> {
     validateBatches?: boolean
@@ -133,104 +137,87 @@ export interface DataPipeOptions<TData extends Data, TRequest> {
     request?: TRequest
 }
 
-export interface Pipeline<TData extends Data, TUnfinalized extends boolean, TRequest = never> {
-    pipeThrough<UData extends Data, UUnfinalized extends boolean, URequest = never>(
-        duplexFactory: (
-            opts: DataFactoryOptions<TData, TUnfinalized>,
-        ) => Awaitable<
-            DataDuplex<TData, UData, TUnfinalized extends true ? true : boolean, UUnfinalized, TRequest, URequest>
-        >,
-        opts?: DataPipeOptions<TData, TRequest>,
-    ): Pipeline<UData, UUnfinalized, URequest>
-    pipeTo<TResult>(
+export interface DataStream<TData extends Data, TUnfinalized extends boolean, TRequest = never> {
+    pipe<TResult>(
         targetFactory: (
             opts: DataFactoryOptions<TData, TUnfinalized>,
-        ) => Awaitable<DataTarget<TData, TUnfinalized extends true ? true : boolean, TRequest, TResult>>,
+        ) => DataTarget<TData, TUnfinalized extends true ? true : boolean, TRequest, TResult>,
         opts?: DataPipeOptions<TData, TRequest>,
-    ): Promise<TResult>
-    [Symbol.asyncIterator](): AsyncIterableIterator<DataBatch<TData>>
+    ): TResult
+    [Symbol.asyncIterator](): AsyncIterableIterator<TData['value']>
 }
 
-export function pipeline<TData extends Data, TUnfinalized extends boolean, TRequest = never>(
-    sourceFactory: () => Awaitable<DataSource<TData, TUnfinalized, TRequest>>,
-): Pipeline<TData, TUnfinalized, TRequest> {
+export function stream<TData extends Data, TUnfinalized extends boolean, TRequest = never>(
+    sourceFactory: () => DataSource<TData, TUnfinalized, TRequest>,
+): DataStream<TData, TUnfinalized, TRequest> {
     return {
-        pipeThrough: (duplexFactory) => {
-            return pipeline(
-                createSource(async () => {
-                    const source = await sourceFactory()
-                    const duplex = await duplexFactory({
-                        unfinalized: source.unfinalized,
-                        ref: source.ref,
-                    })
+        // pipeThrough: (duplexFactory) => {
+        //     return pipeline(
+        //         createSource(async () => {
+        //             const source = await sourceFactory()
+        //             const duplex = await duplexFactory({
+        //                 unfinalized: source.unfinalized,
+        //                 ref: source.ref,
+        //             })
 
-                    return {
-                        unfinalized: duplex.source.unfinalized,
-                        ref: duplex.source.ref,
-                        read: async function* (opts) {
-                            const pipePromise = pipe(source, duplex.target).catch((err) => {
-                                throw err
-                            })
-                            yield* duplex.source.read(opts)
+        //             return {
+        //                 unfinalized: duplex.source.unfinalized,
+        //                 ref: duplex.source.ref,
+        //                 read: async function* (opts) {
+        //                     const pipePromise = pipe(source, duplex.target).catch((err) => {
+        //                         throw err
+        //                     })
+        //                     yield* duplex.source.read(opts)
 
-                            await pipePromise
-                        },
-                    }
-                }),
-            )
-        },
-        pipeTo: async (targetFactory) => {
-            const source = await sourceFactory()
-            const target = await targetFactory({
+        //                     await pipePromise
+        //                 },
+        //             }
+        //         }),
+        //     )
+        // },
+        pipe: (targetFactory) => {
+            const source = sourceFactory()
+            const target = targetFactory({
                 unfinalized: source.unfinalized,
                 ref: source.ref,
             })
 
             return pipe(source, target)
         },
-        [Symbol.asyncIterator](opts?: DataReadOptions<TData, TRequest>) {
-            const offset = opts?.offset
-
-            let reader: AsyncIterableIterator<DataMessage<TData, TUnfinalized>> | undefined
-            return {
-                next: async () => {
-                    if (!reader) {
-                        const source = await sourceFactory()
-                        reader = source.read({offset})
-                    }
-                    const result = await reader.next()
-                    if (result.done) {
-                        return {done: true, value: undefined}
-                    }
-
-                    switch (result.value.type) {
-                        case 'batch':
-                            return {value: result.value.value, done: false}
-                        case 'fork':
-                            throw new ForkException(result.value.value)
-                    }
+        [Symbol.asyncIterator]: (opts?: DataReadOptions<TData, TRequest>) => {
+            const source = sourceFactory()
+            return pipe(
+                source,
+                {
+                    unfinalized: source.unfinalized,
+                    write: async function* (streamOpts) {
+                        for await (const message of streamOpts.read(opts ?? {offset: undefined, request: undefined})) {
+                            switch (message.type) {
+                                case 'batch':
+                                    yield* message.value.data.map((item) => item.value)
+                                    break
+                                case 'fork':
+                                    throw new ForkException(message.value)
+                                default:
+                                    throw unexpectedCase((message as any).type)
+                            }
+                        }
+                    },
                 },
-                return: async () => {
-                    await reader?.return?.()
-                    return {done: true, value: undefined}
+                {
+                    offset: opts?.offset,
+                    request: opts?.request,
                 },
-                throw: async (err) => {
-                    await reader?.throw?.(err)
-                    throw err
-                },
-                [Symbol.asyncIterator]() {
-                    return this
-                },
-            }
+            )
         },
     }
 }
 
-async function pipe<TData extends Data, TRequest = never, TResult = unknown>(
+function pipe<TData extends Data, TRequest = never, TResult = unknown>(
     source: DataSource<TData, boolean, TRequest>,
     target: DataTarget<TData, boolean, TRequest, TResult>,
     opts: DataPipeOptions<TData, TRequest> = {validateBatches: true},
-): Promise<TResult> {
+): TResult {
     if (source.unfinalized && !target.unfinalized) {
         throw new TypeError('Cannot pipe from unfinalized DataSource to finalized DataTarget')
     }
@@ -241,8 +228,9 @@ async function pipe<TData extends Data, TRequest = never, TResult = unknown>(
             let offset = streamOpts.offset
 
             for await (const message of source.read(streamOpts)) {
-                yield handleMessage(message, {
-                    batch: (batch): DataBatchMessage<TData> => {
+                switch (message.type) {
+                    case 'batch': {
+                        const batch = message.value
                         if (opts.validateBatches) {
                             if (offset && !source.ref.compare(batch.offset, offset).isGreaterOrEqual) {
                                 throw new Error('New offset is below the previous offset')
@@ -278,12 +266,13 @@ async function pipe<TData extends Data, TRequest = never, TResult = unknown>(
 
                         offset = batch.offset
 
-                        return {
+                        yield {
                             type: 'batch',
                             value: batch,
                         }
-                    },
-                    fork: (fork): DataForkMessage<TData> => {
+                        break
+                    }
+                    case 'fork': {
                         if (!source.unfinalized) {
                             throw new TypeError('Got fork message from finalized DataSource')
                         }
@@ -291,12 +280,38 @@ async function pipe<TData extends Data, TRequest = never, TResult = unknown>(
                             throw new TypeError('Got fork message for finalized DataTarget')
                         }
 
-                        return {
+                        yield {
                             type: 'fork',
-                            value: fork,
+                            value: message.value,
                         }
-                    },
-                })
+                        break
+                    }
+                    default: {
+                        throw unexpectedCase((message as any).type)
+                    }
+                }
+            }
+        },
+    })
+}
+
+function reader<TData extends Data, TRequest>(
+    source: DataSource<TData, boolean, TRequest>,
+    opts: DataReadOptions<TData, TRequest>,
+) {
+    return createTarget({
+        unfinalized: source.unfinalized,
+        write: async function* (streamOpts) {
+            for await (const message of source.read(opts)) {
+                switch (message.type) {
+                    case 'batch':
+                        yield* message.value.data.map((item) => item.value)
+                        break
+                    case 'fork':
+                        throw new ForkException(message.value)
+                    default:
+                        throw unexpectedCase((message as any).type)
+                }
             }
         },
     })

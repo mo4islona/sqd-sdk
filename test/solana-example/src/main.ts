@@ -5,7 +5,7 @@ import {
     createTarget,
     createTransformer,
     handleMessage,
-    pipeline,
+    stream,
     type Data,
     type DataDuplexFactory,
 } from '@sqd-sdk/core/pipeline'
@@ -31,7 +31,7 @@ async function main() {
 
     console.log(`processing range: [${fromBlock}, ${toBlock ?? null}]`)
 
-    await pipeline(
+    await stream(
         solanaPortalDataSource({
             portal,
             query: {
@@ -76,8 +76,8 @@ async function main() {
             },
         }),
     )
-        .pipeThrough(createProgressTracker('solana'))
-        .pipeTo(
+        .pipe(createProgressTracker('solana'))
+        .pipe(
             createTypeormTarget({}, async (store, batch) => {
                 for (let block of batch) {
                     for (let ins of block.instructions) {
@@ -136,7 +136,7 @@ function createProgressTracker<
 >(prefix: string): DataDuplexFactory<T, T, TUnfinalized, TUnfinalized, TRequest, TRequest> {
     const logger = createLogger(`sqd:${prefix}`)
 
-    return createTransformer(async (opts) => {
+    return createTransformer((opts) => {
         return {
             unfinalized: opts.unfinalized,
             ref: opts.ref,
