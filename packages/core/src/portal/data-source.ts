@@ -1,6 +1,6 @@
 import {last} from '../internal/misc'
 import {Throttler} from '../internal/throttler'
-import {ForkException, type Data, type DataBatch, DataRef, createSource, type DataSourceFactory} from '../pipeline'
+import {type Data, DataRef, createSource, type DataSourceFactory, type DataMessage} from '../pipeline'
 import {PortalClient, type BlockRef, type PortalClientOptions, isForkException} from './client'
 import type {GetBlock, Query} from './query'
 
@@ -30,12 +30,14 @@ function calculateHead(portalHead: BlockRef, lastBlock: BlockRef | undefined): B
 export type PortalData<TQuery extends Query> = Data<GetBlock<TQuery>, BlockRef>
 
 export function portalDataSource<TQuery extends Query>(
-    options: PortalDataSourceOptions<TQuery>
-): DataSourceFactory<PortalData<TQuery>, true> {
+    options: PortalDataSourceOptions<TQuery>,
+): DataSourceFactory<PortalData<TQuery>, true, never> {
     const portal = options.portal instanceof PortalClient ? options.portal : new PortalClient(options.portal)
     const headThrottler = new Throttler(async () => portal.getHead(), 5_000)
 
-    const createDataStream = async function* (offset?: BlockRef): AsyncIterableIterator<DataBatch<PortalData<TQuery>>> {
+    const createDataStream = async function* (
+        offset?: BlockRef,
+    ): AsyncIterableIterator<DataMessage<PortalData<TQuery>, true>> {
         let parentBlockHash: string | undefined
         let fromBlock = options.query.fromBlock ?? 0
         if (offset) {
@@ -66,15 +68,21 @@ export function portalDataSource<TQuery extends Query>(
                 const finalizedHead = batch.finalizedHead
 
                 yield {
-                    data,
-                    finalizedHead,
-                    head,
-                    offset,
+                    type: 'batch',
+                    value: {
+                        offset,
+                        head,
+                        finalizedHead,
+                        data,
+                    },
                 }
             }
         } catch (err) {
             if (isForkException(err)) {
-                throw new ForkException({heads: err.lastBlocks})
+                yield {
+                    type: 'fork',
+                    value: {heads: err.lastBlocks},
+                }
             }
             throw err
         }
@@ -83,6 +91,6 @@ export function portalDataSource<TQuery extends Query>(
     return createSource({
         unfinalized: true,
         ref: BlockId,
-        reader: (opts) => createDataStream(opts.offset),
+        read: (opts) => createDataStream(opts.offset),
     })
 }
