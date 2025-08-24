@@ -3,13 +3,12 @@ import {type Data, createSource, type DataSourceFactory, type DataMessage} from 
 import {
     type Block,
     blockFromPartial,
-    type BlockPartial,
     type FieldSelection,
     type RequiredFieldSelection,
     REQUIRED_FIELDS,
 } from './objects'
 import {setUpRelations} from './objects/relations'
-import {mergeDataRequests, type SolanaQueryOptions} from './query'
+import {mergeDataRequests, type SolanaDataRequestRange, type SolanaQueryOptions} from './query'
 import {
     BlockId,
     type BlockRef,
@@ -30,7 +29,7 @@ export type SolanaPortalData<F extends FieldSelection> = Data<Block<GetFields<F>
 
 export function solanaPortalDataSource<F extends FieldSelection>(
     options: SolanaPortalDataReaderOptions<F>,
-): DataSourceFactory<SolanaPortalData<F>, true, never> {
+): DataSourceFactory<SolanaPortalData<F>, true, SolanaDataRequestRange[]> {
     const fields = getFields(options.query.fields)
     const requests = mergeRangeRequests(options.query.requests, mergeDataRequests)
 
@@ -56,12 +55,15 @@ export function solanaPortalDataSource<F extends FieldSelection>(
                     case 'batch': {
                         yield {
                             type: 'batch',
-                            data: message.data.map(
-                                (i): SolanaPortalData<F> => ({
-                                    value: mapBlock(i.value, fields),
+                            data: message.data.map((i): SolanaPortalData<F> => {
+                                const value = blockFromPartial<GetFields<F>>(i.value as any)
+                                setUpRelations(value)
+
+                                return {
                                     id: i.id,
-                                }),
-                            ),
+                                    value,
+                                }
+                            }),
                             finalizedHead: message.finalizedHead,
                             head: message.head,
                             offset: message.offset,
@@ -82,16 +84,6 @@ export function solanaPortalDataSource<F extends FieldSelection>(
         ref: BlockId,
         read: (opts) => createDataStream(opts.offset),
     })
-}
-
-export function mapBlock<F extends RequiredFieldSelection>(
-    rawBlock: unknown,
-    fields: RequiredFieldSelection,
-): Block<F> {
-    const block = blockFromPartial(rawBlock as BlockPartial<F>)
-    setUpRelations(block as any)
-
-    return block
 }
 
 function getFields<T extends FieldSelection>(fields: T): GetFields<T> {

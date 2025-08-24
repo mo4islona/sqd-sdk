@@ -21,14 +21,18 @@ export type TokenBalanceRequestOptions = RequestOptions<Solana.TokenBalanceReque
 export type BalanceRequestOptions = RequestOptions<Solana.BalanceRequest>
 export type RewardRequestOptions = RequestOptions<Solana.RewardRequest>
 
+export type SolanaDataRequest = Solana.DataRequest
+
+export type SolanaDataRequestRange = RangeRequest<SolanaDataRequest>
+
 export type SolanaQueryOptions<F extends Solana.FieldSelection = Solana.FieldSelection> = {
     fields: F
-    requests: RangeRequest<Solana.DataRequest>[]
+    requests: SolanaDataRequestRange[]
 }
 
 export class SolanaQueryBuilder<F extends Solana.FieldSelection = {block: {number: true; hash: true}}> {
     private range: Range = {from: 0}
-    private requests: RangeRequest<Solana.DataRequest>[] = []
+    private requests: RangeRequest<SolanaDataRequest>[] = []
     private fields: F = {
         block: {number: true, hash: true},
     } as F
@@ -127,7 +131,7 @@ export function mergeRequests(...requests: RangeRequest<Solana.DataRequest>[]): 
 
 export function mergeQueries<T extends SolanaQueryOptions, U extends SolanaQueryOptions>(
     a: T,
-    b: U
+    b: U,
 ): MergeQueryOptions<T, U>
 export function mergeQueries<T extends readonly SolanaQueryOptions[]>(...queries: T): MergeQueryOptionsAll<T>
 export function mergeQueries<T extends readonly SolanaQueryOptions[]>(...queries: T) {
