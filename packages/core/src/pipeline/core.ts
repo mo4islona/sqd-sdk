@@ -1,5 +1,5 @@
 import {ForkException} from './errors'
-import type {Data, DataBatch, DataFork, DataCursor, DataCursorUtils} from './data'
+import type {Data, DataBatch, DataFork, DataCursorUtils} from './data'
 import type {Maybe} from '../internal/types'
 import {unexpectedCase} from '../internal/misc'
 
@@ -232,7 +232,8 @@ function pipe<TData extends Data, TRequest = never, TResult = unknown>(
                             throw new TypeError('Got fork message for finalized DataTarget')
                         }
 
-                        break
+                        // FIXME: should we always force exit on fork?
+                        return
                     }
                     default: {
                         throw unexpectedCase((message as any).type)

@@ -72,6 +72,22 @@ async function main() {
         //.pipe(createFinalizer())
         .pipe(createProgressTracker('solana'))
         .pipe(
+            createTransformer((opts) => {
+                return {
+                    unfinalized: true,
+                    cursorUtils: opts.cursorUtils,
+                    transform: async function* (transformOpts) {
+                        for await (const message of transformOpts.read({
+                            cursor: transformOpts.cursor,
+                            request: transformOpts.request,
+                        })) {
+                            yield message
+                        }
+                    },
+                }
+            }),
+        )
+        .pipe(
             createTypeormTarget({}, async (store, batch) => {
                 for (let block of batch) {
                     for (let ins of block.instructions) {

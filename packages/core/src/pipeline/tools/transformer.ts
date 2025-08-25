@@ -37,10 +37,10 @@ export type DataTransformerFactory<
 
 export function createTransformer<
     TInputData extends Data,
-    TOutputData extends Data,
-    TUnfinalized extends boolean,
-    TInputRequest,
-    TOutputRequest,
+    TOutputData extends Data = TInputData,
+    TUnfinalized extends boolean = boolean,
+    TInputRequest = never,
+    TOutputRequest = TInputRequest,
 >(
     transformerFactory: DataTransformerFactory<TInputData, TOutputData, TUnfinalized, TInputRequest, TOutputRequest>,
 ): DataDuplexFactory<TInputData, TOutputData, TUnfinalized, TUnfinalized, TInputRequest, TOutputRequest> {

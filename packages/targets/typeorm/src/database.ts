@@ -12,7 +12,6 @@ import {createTarget, type DataFork, type Data, type DataBatch} from '@sqd-sdk/c
 export type IsolationLevel = 'SERIALIZABLE' | 'READ COMMITTED' | 'REPEATABLE READ'
 
 export interface TypeormDatabaseOptions {
-    supportHotBlocks?: boolean
     isolationLevel?: IsolationLevel
     stateSchema?: string
     projectDir?: string
@@ -49,19 +48,16 @@ export class TypeormDatabase {
     }
     protected projectDir: string
 
-    public readonly supportsHotBlocks: boolean
-
     constructor(options?: TypeormDatabaseOptions) {
         this.statusSchema = options?.stateSchema || 'squid_processor'
         this.isolationLevel = options?.isolationLevel || 'SERIALIZABLE'
         this.postponeWriteOperations = options?.postponeWriteOperations ?? true
         this.cacheEntities = options?.cacheEntities ?? true
         this.resetOnCommit = options?.resetOnCommit ?? true
-        this.supportsHotBlocks = options?.supportHotBlocks ?? true
         this.projectDir = options?.projectDir || process.cwd()
     }
 
-    async connect(): Promise<DatabaseState> {
+    async connect(): Promise<HashAndHeight | undefined> {
         assert(this.con == null, 'already connected')
 
         let cfg = createOrmConfig({projectDir: this.projectDir})
@@ -83,7 +79,7 @@ export class TypeormDatabase {
         this.con = undefined
     }
 
-    private async initTransaction(em: EntityManager): Promise<DatabaseState> {
+    private async initTransaction(em: EntityManager): Promise<HashAndHeight | undefined> {
         let schema = this.escapedSchema()
 
         await em.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`)
@@ -107,13 +103,13 @@ export class TypeormDatabase {
             `SELECT number, hash, nonce FROM ${schema}.status WHERE id = 0`,
         )
         if (status.length === 0) {
-            await em.query(`INSERT INTO ${schema}.status (id, number, hash) VALUES (0, -1, '0x')`)
-            status.push({number: -1, hash: '0x', nonce: 0})
+            return undefined
         }
 
         let top: HashAndHeight[] = await em.query(`SELECT number, hash FROM ${schema}.hot_block ORDER BY number`)
 
-        return assertStateInvariants({...status[0], top})
+        let state = assertStateInvariants({...status[0], top})
+        return state.top.length > 0 ? state.top[state.top.length - 1] : {number: state.number, hash: state.hash}
     }
 
     private async getState(em: EntityManager): Promise<DatabaseState> {
@@ -313,11 +309,10 @@ export function createTypeormTarget<TValue>(
             unfinalized: true,
             write: async ({cursorUtils, read}) => {
                 let db = new TypeormDatabase(databaseOpts)
-                const state = await db.connect()
 
-                const cursor = state.top.length > 0 ? state.top[state.top.length - 1] : state
+                const cursor = await db.connect()
 
-                async function process(cursor: HashAndHeight) {
+                async function process(cursor: HashAndHeight | undefined) {
                     for await (const message of read({cursor})) {
                         switch (message.type) {
                             case 'batch': {
