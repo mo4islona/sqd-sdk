@@ -2,15 +2,6 @@ import type {Data, DataCursorUtils} from '../data'
 import type {DataDuplexFactory, DataFactoryOptions, DataReadOptions, DataMessage, DataWriteOptions} from '../core'
 import {createSource, createTarget, stream} from '../core'
 
-export interface DataTransformOptions<
-    TInputData extends Data,
-    TOutputData extends Data,
-    TUnfinalized extends boolean,
-    TInputRequest,
-    TOutputRequest,
-> extends DataReadOptions<TOutputData, TOutputRequest>,
-        DataWriteOptions<TInputData, TUnfinalized, TInputRequest> {}
-
 export interface DataTransformer<
     TInputData extends Data,
     TOutputData extends Data,
@@ -21,7 +12,8 @@ export interface DataTransformer<
     unfinalized: TUnfinalized
     cursorUtils: DataCursorUtils<TOutputData['cursor']>
     transform: (
-        opts: DataTransformOptions<TInputData, TOutputData, TUnfinalized, TInputRequest, TOutputRequest>,
+        writeOpts: DataWriteOptions<TInputData, TUnfinalized, TInputRequest>,
+        readOpts: DataReadOptions<TOutputData, TOutputRequest>,
     ) => AsyncIterableIterator<DataMessage<TOutputData, TUnfinalized>>
 }
 
@@ -32,7 +24,7 @@ export type DataTransformerFactory<
     TInputRequest,
     TOutputRequest,
 > = (
-    opts: DataFactoryOptions<boolean> & {cursorUtils: DataCursorUtils<TOutputData['cursor']>},
+    opts: DataFactoryOptions<TUnfinalized> & {cursorUtils: DataCursorUtils<TOutputData['cursor']>},
 ) => DataTransformer<TInputData, TOutputData, TUnfinalized, TInputRequest, TOutputRequest>
 
 export function createTransformer<
@@ -57,12 +49,16 @@ export function createTransformer<
                         unfinalized: transformer.unfinalized,
                         cursorUtils: transformer.cursorUtils,
                         read: (readOpts) =>
-                            transformer.transform({
-                                cursor: readOpts.cursor,
-                                request: readOpts.request,
-                                cursorUtils: writeOpts.cursorUtils,
-                                read: writeOpts.read,
-                            }),
+                            transformer.transform(
+                                {
+                                    cursorUtils: writeOpts.cursorUtils,
+                                    read: writeOpts.read,
+                                },
+                                {
+                                    cursor: readOpts.cursor,
+                                    request: readOpts.request,
+                                },
+                            ),
                     }),
                 )
             },

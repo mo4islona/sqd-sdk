@@ -27,46 +27,44 @@ async function main() {
     await stream(
         solanaPortalDataSource({
             portal,
-            query: {
-                fields: {
-                    block: {number: true, timestamp: true, hash: true, parentHash: true},
-                    transaction: {signatures: true, err: true, transactionIndex: true},
-                    instruction: {
-                        programId: true,
-                        accounts: true,
-                        data: true,
-                        isCommitted: true,
-                        transactionIndex: true,
-                        instructionAddress: true,
-                    },
-                    tokenBalance: {
-                        account: true,
-                        preMint: true,
-                        preOwner: true,
-                        preAmount: true,
-                        postMint: true,
-                        postOwner: true,
-                        postAmount: true,
+            fields: {
+                block: {number: true, timestamp: true, hash: true, parentHash: true},
+                transaction: {signatures: true, err: true, transactionIndex: true},
+                instruction: {
+                    programId: true,
+                    accounts: true,
+                    data: true,
+                    isCommitted: true,
+                    transactionIndex: true,
+                    instructionAddress: true,
+                },
+                tokenBalance: {
+                    account: true,
+                    preMint: true,
+                    preOwner: true,
+                    preAmount: true,
+                    postMint: true,
+                    postOwner: true,
+                    postAmount: true,
+                },
+            },
+            request: [
+                {
+                    range: {from: fromBlock, to: toBlock},
+                    request: {
+                        instructions: [
+                            {
+                                programId: ['whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc'],
+                                d8: ['0xf8c69e91e17587c8'],
+                                isCommitted: true,
+                                innerInstructions: true,
+                                transaction: true,
+                                transactionTokenBalances: true,
+                            },
+                        ],
                     },
                 },
-                requests: [
-                    {
-                        range: {from: fromBlock, to: toBlock},
-                        request: {
-                            instructions: [
-                                {
-                                    programId: ['whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc'],
-                                    d8: ['0xf8c69e91e17587c8'],
-                                    isCommitted: true,
-                                    innerInstructions: true,
-                                    transaction: true,
-                                    transactionTokenBalances: true,
-                                },
-                            ],
-                        },
-                    },
-                ],
-            },
+            ],
         }),
     )
         //.pipe(createFinalizer())
@@ -74,13 +72,10 @@ async function main() {
         .pipe(
             createTransformer((opts) => {
                 return {
-                    unfinalized: true,
+                    unfinalized: opts.unfinalized,
                     cursorUtils: opts.cursorUtils,
-                    transform: async function* (transformOpts) {
-                        for await (const message of transformOpts.read({
-                            cursor: transformOpts.cursor,
-                            request: transformOpts.request,
-                        })) {
+                    transform: async function* (writeOpts, readOpts) {
+                        for await (const message of writeOpts.read(readOpts)) {
                             yield message
                         }
                     },
@@ -148,17 +143,14 @@ function createProgressTracker<
 
     return createTransformer((opts) => {
         return {
-            unfinalized: opts.unfinalized as TUnfinalized,
+            unfinalized: opts.unfinalized,
             cursorUtils: opts.cursorUtils,
-            transform: async function* (transformOpts) {
-                if (transformOpts.cursor) {
-                    logger.info(`continue from ${transformOpts.cursor.number}`)
+            transform: async function* (writeOpts, readOpts) {
+                if (readOpts.cursor) {
+                    logger.info(`continue from ${readOpts.cursor.number}`)
                 }
 
-                for await (const message of transformOpts.read({
-                    cursor: transformOpts.cursor,
-                    request: transformOpts.request,
-                })) {
+                for await (const message of writeOpts.read(readOpts)) {
                     switch (message.type) {
                         case 'batch':
                             if (message.data.length > 0) {

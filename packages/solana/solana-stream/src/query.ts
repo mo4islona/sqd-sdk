@@ -25,17 +25,9 @@ export type SolanaDataRequest = Solana.DataRequest
 
 export type SolanaDataRequestRange = RangeRequest<SolanaDataRequest>
 
-export type SolanaQueryOptions<F extends Solana.FieldSelection = Solana.FieldSelection> = {
-    fields: F
-    requests: SolanaDataRequestRange[]
-}
-
 export class SolanaQueryBuilder<F extends Solana.FieldSelection = {block: {number: true; hash: true}}> {
     private range: Range = {from: 0}
     private requests: RangeRequest<SolanaDataRequest>[] = []
-    private fields: F = {
-        block: {number: true, hash: true},
-    } as F
 
     private addRequest(type: keyof Solana.DataRequest, options: RequestOptions<any>): this {
         this.requests.push({
@@ -81,17 +73,8 @@ export class SolanaQueryBuilder<F extends Solana.FieldSelection = {block: {numbe
         return this
     }
 
-    setFields<F extends Solana.FieldSelection>(fields: F): SolanaQueryBuilder<F> {
-        this.fields = fields as any
-        return this as any
-    }
-
-    build(): SolanaQueryOptions<F> {
-        let requests = mergeRangeRequests(this.requests, mergeDataRequests)
-        return {
-            fields: this.fields,
-            requests: applyRangeBound(requests, this.range),
-        }
+    build(): SolanaDataRequestRange[] {
+        return applyRangeBound(mergeRangeRequests(this.requests, mergeDataRequests), this.range)
     }
 }
 
@@ -111,34 +94,8 @@ export function mergeDataRequests(...requests: Solana.DataRequest[]): Solana.Dat
     return res
 }
 
-export type MergeQueryOptions<T extends SolanaQueryOptions, U extends SolanaQueryOptions> = SolanaQueryOptions<
-    MergeSelection<T['fields'], U['fields']>
-> extends infer R
-    ? R
-    : never
-
-export type MergeQueryOptionsAll<T extends readonly SolanaQueryOptions[]> = T extends readonly [infer F, ...infer R]
-    ? F extends SolanaQueryOptions
-        ? R extends [SolanaQueryOptions, ...SolanaQueryOptions[]]
-            ? MergeQueryOptions<F, MergeQueryOptionsAll<R>>
-            : F
-        : never
-    : never
-
 export function mergeRequests(...requests: RangeRequest<Solana.DataRequest>[]): RangeRequest<Solana.DataRequest>[] {
     return mergeRangeRequests(requests, mergeDataRequests)
-}
-
-export function mergeQueries<T extends SolanaQueryOptions, U extends SolanaQueryOptions>(
-    a: T,
-    b: U,
-): MergeQueryOptions<T, U>
-export function mergeQueries<T extends readonly SolanaQueryOptions[]>(...queries: T): MergeQueryOptionsAll<T>
-export function mergeQueries<T extends readonly SolanaQueryOptions[]>(...queries: T) {
-    return {
-        fields: mergeSelection(...queries.map((q) => q.fields)),
-        requests: mergeRequests(...queries.flatMap((q) => q.requests)),
-    }
 }
 
 function concatRequestLists<T extends object>(a?: T[], b?: T[]): T[] | undefined {

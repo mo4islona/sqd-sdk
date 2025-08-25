@@ -1,4 +1,4 @@
-import {applyRangeBound, mergeRangeRequests} from '@sqd-sdk/core/internal/range/index'
+import {applyRangeBound, mergeRangeRequests, type Range} from '@sqd-sdk/core/internal/range/index'
 import {type Data, createSource, type DataSourceFactory, type DataMessage} from '@sqd-sdk/core/pipeline'
 import {
     type Block,
@@ -7,7 +7,7 @@ import {
     type RequiredFieldSelection,
     REQUIRED_FIELDS,
 } from './objects'
-import {mergeDataRequests, type SolanaDataRequestRange, type SolanaQueryOptions} from './query'
+import {mergeDataRequests, type SolanaDataRequestRange} from './query'
 import {
     BlockCursorUtils,
     type BlockRef,
@@ -21,7 +21,9 @@ type GetFields<F extends FieldSelection> = MergeSelection<RequiredFieldSelection
 
 export interface SolanaPortalDataReaderOptions<F extends FieldSelection> {
     portal: PortalClientOptions | PortalClient
-    query: SolanaQueryOptions<F>
+    fields: F
+    request: SolanaDataRequestRange[]
+    range?: Range
 }
 
 export type SolanaPortalData<F extends FieldSelection> = Data<Block<GetFields<F>>, BlockRef>
@@ -29,13 +31,21 @@ export type SolanaPortalData<F extends FieldSelection> = Data<Block<GetFields<F>
 export function solanaPortalDataSource<F extends FieldSelection>(
     options: SolanaPortalDataReaderOptions<F>,
 ): DataSourceFactory<SolanaPortalData<F>, true, SolanaDataRequestRange[]> {
-    const fields = getFields(options.query.fields)
-    const requests = mergeRangeRequests(options.query.requests, mergeDataRequests)
+    const fields = getFields(options.fields)
+    let requests = mergeRangeRequests(options.request, mergeDataRequests)
+    if (options.range) {
+        requests = applyRangeBound(requests, options.range)
+    }
 
     const createDataStream = async function* (
         cursor?: BlockRef,
+        request?: SolanaDataRequestRange[],
     ): AsyncIterableIterator<DataMessage<SolanaPortalData<F>, true>> {
-        const requestsBounded = cursor ? applyRangeBound(requests, {from: cursor.number + 1}) : requests
+        const requestsBounded = cursor
+            ? applyRangeBound(request ? mergeRangeRequests([...requests, ...request], mergeDataRequests) : requests, {
+                  from: cursor.number + 1,
+              })
+            : requests
 
         for (const request of requestsBounded) {
             const portalSource = portalDataSource({
@@ -80,7 +90,7 @@ export function solanaPortalDataSource<F extends FieldSelection>(
     return createSource({
         unfinalized: true,
         cursorUtils: BlockCursorUtils,
-        read: (opts) => createDataStream(opts.cursor),
+        read: (opts) => createDataStream(opts.cursor, opts.request),
     })
 }
 
