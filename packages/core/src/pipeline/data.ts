@@ -1,8 +1,10 @@
-export interface DataRef<TValue> {
-    compare(a: TValue, b: TValue): DataRef.CompareResult
+export interface DataCursorUtils<TValue> {
+    compare(a: TValue, b: TValue): DataCursor.CompareResult
+    serialize(value: TValue): unknown
+    deserialize(value: unknown): TValue
 }
 
-export namespace DataRef {
+export namespace DataCursor {
     export enum Compare {
         Equal = 0,
         Less = 1,
@@ -46,18 +48,18 @@ export namespace DataRef {
 
 export type Data<TValue = unknown, TId = unknown> = {
     value: TValue
-    id: TId
+    cursor: TId
 }
 
-export type DataId<TData extends Data> = TData['id']
+export type DataCursor<TData extends Data> = TData['cursor']
 
 export interface DataBatch<TData extends Data, TUnfinalized extends boolean = boolean> {
     readonly data: TData[]
-    readonly finalizedHead: TUnfinalized extends false ? DataId<TData> : DataId<TData> | undefined
-    readonly head: DataId<TData>
-    readonly offset: DataId<TData>
+    readonly finalizedHead: TUnfinalized extends false ? DataCursor<TData> : DataCursor<TData> | undefined
+    readonly head: DataCursor<TData>
+    readonly cursor: DataCursor<TData>
 }
 
-export interface DataFork<TId> {
-    readonly heads: TId[]
+export interface DataFork<TCursor> {
+    readonly cursors: TCursor[]
 }

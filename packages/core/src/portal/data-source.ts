@@ -1,6 +1,6 @@
 import {last} from '../internal/misc'
 import {Throttler} from '../internal/throttler'
-import {type Data, DataRef, createSource, type DataSourceFactory, type DataMessage} from '../pipeline'
+import {type Data, DataCursor, createSource, type DataSourceFactory, type DataMessage} from '../pipeline'
 import {PortalClient, type BlockRef, type PortalClientOptions, isForkException} from './client'
 import type {GetBlock, Query} from './query'
 
@@ -9,22 +9,30 @@ export interface PortalDataSourceOptions<TQuery extends Query> {
     query: TQuery
 }
 
-export const BlockId = {
+export const BlockCursorUtils = {
     fromBlock(block: {header: BlockRef}): BlockRef {
         return {number: block.header.number, hash: block.header.hash}
     },
 
-    compare(a: BlockRef, b: BlockRef): DataRef.CompareResult {
-        if (a.number < b.number) return DataRef.Less
-        if (a.number > b.number) return DataRef.Greater
-        if (a.hash !== b.hash) return DataRef.Fork
-        return DataRef.Equal
+    compare(a: BlockRef, b: BlockRef): DataCursor.CompareResult {
+        if (a.number < b.number) return DataCursor.Less
+        if (a.number > b.number) return DataCursor.Greater
+        if (a.hash !== b.hash) return DataCursor.Fork
+        return DataCursor.Equal
+    },
+
+    serialize(cursor: BlockRef): unknown {
+        return cursor
+    },
+
+    deserialize(cursor: unknown): BlockRef {
+        return cursor as BlockRef
     },
 }
 
 function calculateHead(portalHead: BlockRef, lastBlock: BlockRef | undefined): BlockRef {
     if (!lastBlock) return portalHead
-    return BlockId.compare(lastBlock, portalHead).isGreater ? lastBlock : portalHead
+    return BlockCursorUtils.compare(lastBlock, portalHead).isGreater ? lastBlock : portalHead
 }
 
 export type PortalData<TQuery extends Query> = Data<GetBlock<TQuery>, BlockRef>
@@ -60,16 +68,16 @@ export function portalDataSource<TQuery extends Query>(
 
                 const data = batch.blocks.map((value) => ({
                     value,
-                    id: BlockId.fromBlock(value),
+                    cursor: BlockCursorUtils.fromBlock(value),
                 }))
 
-                const offset = last(data).id
-                const head = calculateHead(portalHead, offset)
+                const cursor = last(data).cursor
+                const head = calculateHead(portalHead, cursor)
                 const finalizedHead = batch.finalizedHead
 
                 yield {
                     type: 'batch',
-                    offset,
+                    cursor: cursor,
                     head,
                     finalizedHead,
                     data,
@@ -79,7 +87,7 @@ export function portalDataSource<TQuery extends Query>(
             if (isForkException(err)) {
                 yield {
                     type: 'fork',
-                    heads: err.lastBlocks,
+                    cursors: err.lastBlocks,
                 }
             }
             throw err
@@ -88,7 +96,7 @@ export function portalDataSource<TQuery extends Query>(
 
     return createSource({
         unfinalized: true,
-        ref: BlockId,
-        read: (opts) => createDataStream(opts.offset),
+        cursorUtils: BlockCursorUtils,
+        read: (opts) => createDataStream(opts.cursor),
     })
 }

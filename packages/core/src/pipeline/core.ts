@@ -1,5 +1,5 @@
 import {ForkException} from './errors'
-import type {Data, DataBatch, DataFork, DataRef} from './data'
+import type {Data, DataBatch, DataFork, DataCursor, DataCursorUtils} from './data'
 import type {Maybe} from '../internal/types'
 import {unexpectedCase} from '../internal/misc'
 
@@ -8,7 +8,7 @@ export interface DataBatchMessage<TData extends Data, TUnfinalized extends boole
     type: 'batch'
 }
 
-export interface DataForkMessage<TData extends Data> extends DataFork<TData['id']> {
+export interface DataForkMessage<TData extends Data> extends DataFork<TData['cursor']> {
     type: 'fork'
 }
 
@@ -17,7 +17,7 @@ export type DataMessage<TData extends Data, TUnfinalized extends boolean> = TUnf
     : DataBatchMessage<TData, TUnfinalized> | DataForkMessage<TData>
 
 export interface DataReadOptions<TData extends Data, TRequest> {
-    offset: Maybe<TData['id']>
+    cursor: Maybe<TData['cursor']>
     request?: TRequest
 }
 
@@ -30,7 +30,7 @@ export interface DataFactoryOptions<TUnfinalized extends boolean> {
 
 export interface DataSource<T extends Data, TUnfinalized extends boolean, TRequest> {
     unfinalized: TUnfinalized
-    ref: DataRef<T['id']>
+    cursorUtils: DataCursorUtils<T['cursor']>
     read: (opts: DataReadOptions<T, TRequest>) => AsyncIterable<DataMessage<T, TUnfinalized>>
 }
 
@@ -53,7 +53,7 @@ export function createSource<TData extends Data, TUnfinalized extends boolean, T
 }
 
 export interface DataWriteOptions<TData extends Data, TUnfinalized extends boolean, TRequest> {
-    ref: DataRef<TData['id']>
+    cursorUtils: DataCursorUtils<TData['cursor']>
     read: (opts: DataReadOptions<TData, TRequest>) => AsyncIterableIterator<DataMessage<TData, TUnfinalized>>
 }
 
@@ -108,7 +108,7 @@ export type DataDuplexFactory<
 export interface DataPipeOptions<TData extends Data, TRequest> {
     validateBatches?: boolean
     stopOnHead?: boolean
-    offset?: TData['id']
+    cursor?: TData['cursor']
     request?: TRequest
 }
 
@@ -139,7 +139,7 @@ export function stream<TData extends Data, TUnfinalized extends boolean, TReques
                 {
                     unfinalized: source.unfinalized,
                     write: async function* (streamOpts) {
-                        for await (const message of streamOpts.read(opts ?? {offset: undefined, request: undefined})) {
+                        for await (const message of streamOpts.read(opts ?? {cursor: undefined, request: undefined})) {
                             switch (message.type) {
                                 case 'batch':
                                     yield* message.data.map((item) => item.value)
@@ -153,7 +153,7 @@ export function stream<TData extends Data, TUnfinalized extends boolean, TReques
                     },
                 },
                 {
-                    offset: opts?.offset,
+                    cursor: opts?.cursor,
                     request: opts?.request,
                 },
             )
@@ -171,9 +171,9 @@ function pipe<TData extends Data, TRequest = never, TResult = unknown>(
     }
 
     return target.write({
-        ref: source.ref,
+        cursorUtils: source.cursorUtils,
         read: async function* (streamOpts) {
-            let offset = streamOpts.offset
+            let offset = streamOpts.cursor
 
             for await (const message of source.read(streamOpts)) {
                 switch (message.type) {
@@ -185,42 +185,42 @@ function pipe<TData extends Data, TRequest = never, TResult = unknown>(
                         }
 
                         if (opts.validateBatches) {
-                            if (offset && !source.ref.compare(batch.offset, offset).isGreaterOrEqual) {
+                            if (offset && !source.cursorUtils.compare(batch.cursor, offset).isGreaterOrEqual) {
                                 throw new Error('New offset is below the previous offset')
                             }
 
-                            if (!source.ref.compare(batch.head, batch.offset).isGreaterOrEqual) {
+                            if (!source.cursorUtils.compare(batch.head, batch.cursor).isGreaterOrEqual) {
                                 throw new Error('Head is below the offset')
                             }
 
                             if (!source.unfinalized) {
-                                if (!source.ref.compare(batch.head, batch.finalizedHead).isEqual) {
+                                if (!source.cursorUtils.compare(batch.head, batch.finalizedHead).isEqual) {
                                     throw new Error('Head is not equal to the finalized head')
                                 }
                             } else if (batch.finalizedHead) {
-                                if (!source.ref.compare(batch.head, batch.finalizedHead).isGreaterOrEqual) {
+                                if (!source.cursorUtils.compare(batch.head, batch.finalizedHead).isGreaterOrEqual) {
                                     throw new Error('Head is below the finalized head')
                                 }
                             }
 
-                            let lastRef = offset
+                            let lastId = offset
                             for (const item of batch.data) {
-                                if (lastRef && !source.ref.compare(item.id, lastRef).isGreater) {
+                                if (lastId && !source.cursorUtils.compare(item.cursor, lastId).isGreater) {
                                     throw new Error('Item is below or equal to the previous item')
                                 }
-                                lastRef = item.id
+                                lastId = item.cursor
                             }
 
-                            if (lastRef && !source.ref.compare(batch.offset, lastRef).isGreaterOrEqual) {
+                            if (lastId && !source.cursorUtils.compare(batch.cursor, lastId).isGreaterOrEqual) {
                                 throw new Error('Offset is below the data')
                             }
 
-                            if (lastRef && !source.ref.compare(batch.head, lastRef).isGreaterOrEqual) {
+                            if (lastId && !source.cursorUtils.compare(batch.head, lastId).isGreaterOrEqual) {
                                 throw new Error('Head is below the data')
                             }
                         }
 
-                        offset = batch.offset
+                        offset = batch.cursor
 
                         break
                     }

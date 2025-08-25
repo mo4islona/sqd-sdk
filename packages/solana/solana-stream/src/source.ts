@@ -7,10 +7,9 @@ import {
     type RequiredFieldSelection,
     REQUIRED_FIELDS,
 } from './objects'
-import {setUpRelations} from './objects/relations'
 import {mergeDataRequests, type SolanaDataRequestRange, type SolanaQueryOptions} from './query'
 import {
-    BlockId,
+    BlockCursorUtils,
     type BlockRef,
     type PortalClient,
     type PortalClientOptions,
@@ -34,9 +33,9 @@ export function solanaPortalDataSource<F extends FieldSelection>(
     const requests = mergeRangeRequests(options.query.requests, mergeDataRequests)
 
     const createDataStream = async function* (
-        offset?: BlockRef,
+        cursor?: BlockRef,
     ): AsyncIterableIterator<DataMessage<SolanaPortalData<F>, true>> {
-        const requestsBounded = offset ? applyRangeBound(requests, {from: offset.number + 1}) : requests
+        const requestsBounded = cursor ? applyRangeBound(requests, {from: cursor.number + 1}) : requests
 
         for (const request of requestsBounded) {
             const portalSource = portalDataSource({
@@ -50,23 +49,22 @@ export function solanaPortalDataSource<F extends FieldSelection>(
                 },
             })()
 
-            for await (const message of portalSource.read({offset})) {
+            for await (const message of portalSource.read({cursor})) {
                 switch (message.type) {
                     case 'batch': {
                         yield {
                             type: 'batch',
                             data: message.data.map((i): SolanaPortalData<F> => {
                                 const value = blockFromPartial<GetFields<F>>(i.value as any)
-                                setUpRelations(value)
 
                                 return {
-                                    id: i.id,
+                                    cursor: i.cursor,
                                     value,
                                 }
                             }),
                             finalizedHead: message.finalizedHead,
                             head: message.head,
-                            offset: message.offset,
+                            cursor: message.cursor,
                         }
                         break
                     }
@@ -81,8 +79,8 @@ export function solanaPortalDataSource<F extends FieldSelection>(
 
     return createSource({
         unfinalized: true,
-        ref: BlockId,
-        read: (opts) => createDataStream(opts.offset),
+        cursorUtils: BlockCursorUtils,
+        read: (opts) => createDataStream(opts.cursor),
     })
 }
 

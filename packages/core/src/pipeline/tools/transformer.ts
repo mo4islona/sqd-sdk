@@ -1,4 +1,4 @@
-import type {Data, DataRef} from '../data'
+import type {Data, DataCursorUtils} from '../data'
 import type {DataDuplexFactory, DataFactoryOptions, DataReadOptions, DataMessage, DataWriteOptions} from '../core'
 import {createSource, createTarget, stream} from '../core'
 
@@ -19,7 +19,7 @@ export interface DataTransformer<
     TOutputRequest,
 > {
     unfinalized: TUnfinalized
-    ref: DataRef<TOutputData['id']>
+    cursorUtils: DataCursorUtils<TOutputData['cursor']>
     transform: (
         opts: DataTransformOptions<TInputData, TOutputData, TUnfinalized, TInputRequest, TOutputRequest>,
     ) => AsyncIterableIterator<DataMessage<TOutputData, TUnfinalized>>
@@ -32,7 +32,7 @@ export type DataTransformerFactory<
     TInputRequest,
     TOutputRequest,
 > = (
-    opts: DataFactoryOptions<boolean> & {ref: DataRef<TOutputData['id']>},
+    opts: DataFactoryOptions<boolean> & {cursorUtils: DataCursorUtils<TOutputData['cursor']>},
 ) => DataTransformer<TInputData, TOutputData, TUnfinalized, TInputRequest, TOutputRequest>
 
 export function createTransformer<
@@ -49,18 +49,18 @@ export function createTransformer<
             unfinalized: opts.unfinalized as TUnfinalized,
             write: (writeOpts) => {
                 const transformer = transformerFactory({
-                    ref: writeOpts.ref,
+                    cursorUtils: writeOpts.cursorUtils,
                     unfinalized: opts.unfinalized,
                 })
                 return stream(
                     createSource({
                         unfinalized: transformer.unfinalized,
-                        ref: transformer.ref,
+                        cursorUtils: transformer.cursorUtils,
                         read: (readOpts) =>
                             transformer.transform({
-                                offset: readOpts.offset,
+                                cursor: readOpts.cursor,
                                 request: readOpts.request,
-                                ref: writeOpts.ref,
+                                cursorUtils: writeOpts.cursorUtils,
                                 read: writeOpts.read,
                             }),
                     }),

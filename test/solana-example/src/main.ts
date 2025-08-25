@@ -133,23 +133,23 @@ function createProgressTracker<
     return createTransformer((opts) => {
         return {
             unfinalized: opts.unfinalized as TUnfinalized,
-            ref: opts.ref,
+            cursorUtils: opts.cursorUtils,
             transform: async function* (transformOpts) {
-                if (transformOpts.offset) {
-                    logger.info(`continue from ${transformOpts.offset.number}`)
+                if (transformOpts.cursor) {
+                    logger.info(`continue from ${transformOpts.cursor.number}`)
                 }
 
                 for await (const message of transformOpts.read({
-                    offset: transformOpts.offset,
+                    cursor: transformOpts.cursor,
                     request: transformOpts.request,
                 })) {
                     switch (message.type) {
                         case 'batch':
                             if (message.data.length > 0) {
-                                const {offset, head, finalizedHead, data} = message
+                                const {cursor, head, finalizedHead, data} = message
                                 logger.info(
                                     [
-                                        `progress: ${offset.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
+                                        `progress: ${cursor.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
                                         `blocks: ${message.data.length}, lag: ${(
                                             (Date.now() - data[data.length - 1].value.header.timestamp * 1000) / 1000
                                         ).toFixed(2)}s`,
@@ -158,7 +158,7 @@ function createProgressTracker<
                             }
                             break
                         case 'fork':
-                            logger.info(`fork: ${message.heads[message.heads.length - 1].number}`)
+                            logger.info(`fork: ${message.cursors[message.cursors.length - 1].number}`)
                             break
                     }
 

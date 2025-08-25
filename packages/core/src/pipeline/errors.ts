@@ -5,9 +5,9 @@ export class ForkException<TId> extends Error {
     readonly isSqdForkException = true
 
     constructor(readonly fork: DataFork<TId>) {
-        assert(fork.heads.length > 0)
-        const lastRef = fork.heads[fork.heads.length - 1]
-        super(`Fork exception at ${lastRef}`)
+        assert(fork.cursors.length > 0)
+        const lastCursor = fork.cursors[fork.cursors.length - 1]
+        super(`Fork exception at ${lastCursor}`)
     }
 
     override get name(): string {

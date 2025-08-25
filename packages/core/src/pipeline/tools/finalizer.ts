@@ -1,4 +1,4 @@
-import type {Data, DataRef, DataBatch, DataFork} from '../data'
+import type {Data, DataBatch, DataFork, DataCursorUtils} from '../data'
 import type {DataDuplexFactory, DataStream} from '../core'
 import {createSource, createTarget, stream} from '../core'
 import {maybeLast} from '../../internal/misc'
@@ -8,7 +8,7 @@ interface BatchProcessingResult<TData extends Data> {
     batch?: DataBatch<TData, false>
 }
 
-function findRollbackIndex<TId>(currentChain: TId[], forkChain: TId[], ref: DataRef<TId>): number {
+function findRollbackIndex<TId>(currentChain: TId[], forkChain: TId[], cursorUtils: DataCursorUtils<TId>): number {
     let currentIndex = 0
     let forkIndex = 0
     let lastCommonIndex = -1
@@ -16,7 +16,7 @@ function findRollbackIndex<TId>(currentChain: TId[], forkChain: TId[], ref: Data
     while (currentIndex < currentChain.length && forkIndex < forkChain.length) {
         const currentBlock = currentChain[currentIndex]
         const forkBlock = forkChain[forkIndex]
-        const cmp = ref.compare(forkBlock, currentBlock)
+        const cmp = cursorUtils.compare(forkBlock, currentBlock)
 
         if (cmp.isFork) {
             return lastCommonIndex
@@ -52,7 +52,7 @@ function createFullyFinalizedBatch<TData extends Data>({
         batch: {
             finalizedHead: batch.finalizedHead,
             head: batch.finalizedHead,
-            offset: batch.offset,
+            cursor: batch.cursor,
             data,
         },
     }
@@ -62,14 +62,14 @@ function createPartialBatch<TData extends Data>({
     batch,
     data,
     finalizedId,
-    ref,
+    cursorUtils,
 }: {
     batch: DataBatch<TData>
     data: TData[]
-    finalizedId: TData['id']
-    ref: DataRef<TData['id']>
+    finalizedId: TData['cursor']
+    cursorUtils: DataCursorUtils<TData['cursor']>
 }): BatchProcessingResult<TData> {
-    const finalizeIndex = data.findIndex((item) => ref.compare(item.id, finalizedId).isGreater)
+    const finalizeIndex = data.findIndex((item) => cursorUtils.compare(item.cursor, finalizedId).isGreater)
     const finalizedData = data.slice(0, finalizeIndex)
 
     return {
@@ -77,7 +77,7 @@ function createPartialBatch<TData extends Data>({
         batch: {
             finalizedHead: batch.finalizedHead,
             head: batch.finalizedHead,
-            offset: maybeLast(finalizedData)?.id ?? finalizedId,
+            cursor: maybeLast(finalizedData)?.cursor ?? finalizedId,
             data: finalizedData,
         },
     }
@@ -86,16 +86,18 @@ function createPartialBatch<TData extends Data>({
 function handleBatch<TData extends Data>({
     batch,
     buffer,
-    ref,
+    cursorUtils,
     finalizedId,
 }: {
     batch: DataBatch<TData>
     buffer: TData[]
-    ref: DataRef<TData['id']>
-    finalizedId: TData['id'] | undefined
+    cursorUtils: DataCursorUtils<TData['cursor']>
+    finalizedId: TData['cursor'] | undefined
 }): BatchProcessingResult<TData> {
     const mergedData = buffer.length > 0 ? [...buffer, ...batch.data] : batch.data
-    const unfinalizedIndex = mergedData.findIndex((item) => ref.compare(item.id, batch.finalizedHead).isGreater)
+    const unfinalizedIndex = mergedData.findIndex(
+        (item) => cursorUtils.compare(item.cursor, batch.finalizedHead).isGreater,
+    )
 
     if (unfinalizedIndex < 0) {
         return createFullyFinalizedBatch({
@@ -104,7 +106,7 @@ function handleBatch<TData extends Data>({
         })
     }
 
-    const newFinalizedId = batch.finalizedHead ?? mergedData[unfinalizedIndex - 1]?.id ?? finalizedId
+    const newFinalizedId = batch.finalizedHead ?? mergedData[unfinalizedIndex - 1]?.cursor ?? finalizedId
     if (!newFinalizedId) {
         return {
             buffer: mergedData,
@@ -115,7 +117,7 @@ function handleBatch<TData extends Data>({
         batch,
         data: mergedData,
         finalizedId: newFinalizedId,
-        ref,
+        cursorUtils,
     })
 }
 
@@ -123,18 +125,18 @@ function handleFork<TData extends Data>({
     fork,
     buffer,
     finalizedId,
-    ref,
+    cursorUtils,
 }: {
-    fork: DataFork<TData['id']>
+    fork: DataFork<TData['cursor']>
     buffer: TData[]
-    finalizedId: TData['id'] | undefined
-    ref: DataRef<TData['id']>
+    finalizedId: TData['cursor'] | undefined
+    cursorUtils: DataCursorUtils<TData['cursor']>
 }): {
     buffer: TData[]
 } {
-    const unfinalizedChain = buffer.map((item) => item.id)
+    const unfinalizedChain = buffer.map((item) => item.cursor)
     const currentChain = finalizedId ? [finalizedId, ...unfinalizedChain] : unfinalizedChain
-    const rollbackIndex = findRollbackIndex(currentChain, fork.heads, ref)
+    const rollbackIndex = findRollbackIndex(currentChain, fork.cursors, cursorUtils)
 
     if (rollbackIndex < 0) {
         // FIXME: add better error message
@@ -160,9 +162,9 @@ export function createFinalizer<TData extends Data, TRequest>(): DataDuplexFacto
             return stream(
                 createSource({
                     unfinalized: false,
-                    ref: writeOptions.ref,
+                    cursorUtils: writeOptions.cursorUtils,
                     read: async function* (readOptions) {
-                        let finalizedId: TData['id'] | undefined
+                        let finalizedCursor: TData['cursor'] | undefined
                         let buffer: TData[] = []
 
                         for await (const message of writeOptions.read(readOptions)) {
@@ -171,11 +173,11 @@ export function createFinalizer<TData extends Data, TRequest>(): DataDuplexFacto
                                     const result = handleBatch({
                                         batch: message,
                                         buffer,
-                                        ref: writeOptions.ref,
-                                        finalizedId,
+                                        cursorUtils: writeOptions.cursorUtils,
+                                        finalizedId: finalizedCursor,
                                     })
                                     buffer = result.buffer
-                                    finalizedId = result.batch?.offset
+                                    finalizedCursor = result.batch?.cursor
 
                                     if (result.batch) {
                                         yield {
@@ -189,8 +191,8 @@ export function createFinalizer<TData extends Data, TRequest>(): DataDuplexFacto
                                     const result = handleFork({
                                         fork: message,
                                         buffer,
-                                        finalizedId,
-                                        ref: writeOptions.ref,
+                                        finalizedId: finalizedCursor,
+                                        cursorUtils: writeOptions.cursorUtils,
                                     })
                                     buffer = result.buffer
                                     break

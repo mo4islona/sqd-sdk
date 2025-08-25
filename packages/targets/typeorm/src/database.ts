@@ -1,13 +1,12 @@
 import {createLogger} from '@sqd-sdk/core/logger'
-import {assert, assertNotNull, last, maybeLast, unexpectedCase} from '@sqd-sdk/core/internal/misc'
-import {DataSource, EntityTarget, FindManyOptions, type EntityManager} from 'typeorm'
+import {assert, assertNotNull, maybeLast} from '@sqd-sdk/core/internal/misc'
+import {DataSource, type EntityManager} from 'typeorm'
 import {Store} from './store'
 import {StateManager} from './utils/stateManager'
 import {createOrmConfig} from '@subsquid/typeorm-config'
 import {ChangeTracker, rollbackBlock} from './utils/hot'
-import type {DatabaseState, FinalTxInfo, HashAndHeight, HotTxInfo} from './interfaces'
+import type {DatabaseState, HashAndHeight} from './interfaces'
 import {def} from '@sqd-sdk/core/internal/def'
-import {EntityLiteral} from './utils/misc'
 import {createTarget, type DataFork, type Data, type DataBatch} from '@sqd-sdk/core/pipeline'
 
 export type IsolationLevel = 'SERIALIZABLE' | 'READ COMMITTED' | 'REPEATABLE READ'
@@ -140,11 +139,11 @@ export class TypeormDatabase {
 
             let unfinalizedIndex = 0
             if (batch.finalizedHead) {
-                unfinalizedIndex = batch.data.findIndex((b) => b.id.number > batch.finalizedHead!.number)
+                unfinalizedIndex = batch.data.findIndex((b) => b.cursor.number > batch.finalizedHead!.number)
             }
 
             if (unfinalizedIndex < 0) {
-                const finalizedRef = maybeLast(batch.data)?.id ?? state
+                const finalizedRef = maybeLast(batch.data)?.cursor ?? state
 
                 await this.deleteHotBlocks(em, finalizedRef.number)
                 await this.performUpdates((store) => cb(store, 0, batch.data.length), em)
@@ -159,7 +158,7 @@ export class TypeormDatabase {
                 }
 
                 for (let i = unfinalizedIndex; i < batch.data.length; i++) {
-                    let b = batch.data[i].id
+                    let b = batch.data[i].cursor
                     await this.insertHotBlock(em, b)
                     await this.performUpdates(
                         (store) => cb(store, i, i + 1),
@@ -168,10 +167,10 @@ export class TypeormDatabase {
                     )
                 }
 
-                await this.updateStatus(em, state.nonce, batch.finalizedHead ?? batch.data[unfinalizedIndex - 1].id)
+                await this.updateStatus(em, state.nonce, batch.finalizedHead ?? batch.data[unfinalizedIndex - 1].cursor)
             }
 
-            return batch.offset
+            return batch.cursor
         })
     }
 
@@ -179,7 +178,7 @@ export class TypeormDatabase {
         return this.submit(async (em) => {
             let state = await this.getState(em)
             let chain = [state, ...state.top]
-            let rollbackPos = findRollbackIndex(chain, fork.heads)
+            let rollbackPos = findRollbackIndex(chain, fork.cursors)
 
             for (let i = chain.length - 1; i >= rollbackPos; i--) {
                 await rollbackBlock(this.statusSchema, em, chain[i].number)
@@ -312,14 +311,14 @@ export function createTypeormTarget<TValue>(
     return createTarget<Data<TValue, HashAndHeight>, true, never, Promise<void>>(() => {
         return {
             unfinalized: true,
-            write: async ({ref, read}) => {
+            write: async ({cursorUtils, read}) => {
                 let db = new TypeormDatabase(databaseOpts)
                 const state = await db.connect()
 
-                const offset = state.top.length > 0 ? state.top[state.top.length - 1] : state
+                const cursor = state.top.length > 0 ? state.top[state.top.length - 1] : state
 
-                async function process(offset: HashAndHeight) {
-                    for await (const message of read({offset})) {
+                async function process(cursor: HashAndHeight) {
+                    for await (const message of read({cursor})) {
                         switch (message.type) {
                             case 'batch': {
                                 const batch = message
@@ -332,14 +331,14 @@ export function createTypeormTarget<TValue>(
                                 break
                             }
                             case 'fork': {
-                                const offset = await db.fork(message)
-                                return process(offset)
+                                const cursor = await db.fork(message)
+                                return process(cursor)
                             }
                         }
                     }
                 }
 
-                await process(offset)
+                await process(cursor)
 
                 await db.disconnect()
             },
