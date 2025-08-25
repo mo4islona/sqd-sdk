@@ -16,8 +16,8 @@ export type DataMessage<TData extends Data, TUnfinalized extends boolean> = TUnf
     ? DataBatchMessage<TData, TUnfinalized>
     : DataBatchMessage<TData, TUnfinalized> | DataForkMessage<TData>
 
-export interface DataReadOptions<TData extends Data, TRequest> {
-    cursor: Maybe<TData['cursor']>
+export interface DataReadOptions<TCursor, TRequest> {
+    cursor: Maybe<TCursor>
     request?: TRequest
 }
 
@@ -31,7 +31,7 @@ export interface DataFactoryOptions<TUnfinalized extends boolean> {
 export interface DataSource<T extends Data, TUnfinalized extends boolean, TRequest> {
     unfinalized: TUnfinalized
     cursorUtils: DataCursorUtils<T['cursor']>
-    read: (opts: DataReadOptions<T, TRequest>) => AsyncIterable<DataMessage<T, TUnfinalized>>
+    read: (opts: DataReadOptions<T['cursor'], TRequest>) => AsyncIterable<DataMessage<T, TUnfinalized>>
 }
 
 export type DataSourceFactory<TData extends Data, TUnfinalized extends boolean, TRequest> = () => DataSource<
@@ -54,7 +54,7 @@ export function createSource<TData extends Data, TUnfinalized extends boolean, T
 
 export interface DataWriteOptions<TData extends Data, TUnfinalized extends boolean, TRequest> {
     cursorUtils: DataCursorUtils<TData['cursor']>
-    read: (opts: DataReadOptions<TData, TRequest>) => AsyncIterableIterator<DataMessage<TData, TUnfinalized>>
+    read: (opts: DataReadOptions<TData['cursor'], TRequest>) => AsyncIterableIterator<DataMessage<TData, TUnfinalized>>
 }
 
 export interface DataTarget<TData extends Data, TUnfinalized extends boolean, TRequest, TResult> {
@@ -132,7 +132,7 @@ export function stream<TData extends Data, TUnfinalized extends boolean, TReques
 
             return pipe(source, target, opts)
         },
-        [Symbol.asyncIterator]: (opts?: DataReadOptions<TData, TRequest>) => {
+        [Symbol.asyncIterator]: (opts?: DataReadOptions<TData['cursor'], TRequest>) => {
             const source = sourceFactory()
             return pipe(
                 source,

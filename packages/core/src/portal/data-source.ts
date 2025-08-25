@@ -1,6 +1,7 @@
 import {last} from '../internal/misc'
 import {Throttler} from '../internal/throttler'
-import {type Data, DataCursor, createSource, type DataSourceFactory, type DataMessage} from '../pipeline'
+import type {DataSourceFactory, DataMessage, BlockSourceFactory, BlockMessage} from '../pipeline'
+import {type BlockData, BlockRefUtils, createBlockSource} from '../pipeline/block'
 import {PortalClient, type BlockRef, type PortalClientOptions, isForkException} from './client'
 import type {GetBlock, Query} from './query'
 
@@ -9,43 +10,22 @@ export interface PortalDataSourceOptions<TQuery extends Query> {
     query: TQuery
 }
 
-export const BlockCursorUtils = {
-    fromBlock(block: {header: BlockRef}): BlockRef {
-        return {number: block.header.number, hash: block.header.hash}
-    },
-
-    compare(a: BlockRef, b: BlockRef): DataCursor.CompareResult {
-        if (a.number < b.number) return DataCursor.Less
-        if (a.number > b.number) return DataCursor.Greater
-        if (a.hash !== b.hash) return DataCursor.Fork
-        return DataCursor.Equal
-    },
-
-    serialize(cursor: BlockRef): unknown {
-        return cursor
-    },
-
-    deserialize(cursor: unknown): BlockRef {
-        return cursor as BlockRef
-    },
-}
-
 function calculateHead(portalHead: BlockRef, lastBlock: BlockRef | undefined): BlockRef {
     if (!lastBlock) return portalHead
-    return BlockCursorUtils.compare(lastBlock, portalHead).isGreater ? lastBlock : portalHead
+    return BlockRefUtils.compare(lastBlock, portalHead).isGreater ? lastBlock : portalHead
 }
 
-export type PortalData<TQuery extends Query> = Data<GetBlock<TQuery>, BlockRef>
+export type PortalData<TQuery extends Query> = GetBlock<TQuery>
 
 export function portalDataSource<TQuery extends Query>(
     options: PortalDataSourceOptions<TQuery>,
-): DataSourceFactory<PortalData<TQuery>, true, never> {
+): BlockSourceFactory<PortalData<TQuery>, true, never> {
     const portal = options.portal instanceof PortalClient ? options.portal : new PortalClient(options.portal)
     const headThrottler = new Throttler(async () => portal.getHead(), 5_000)
 
-    const createDataStream = async function* (
+    const createBlockStream = async function* (
         offset?: BlockRef,
-    ): AsyncIterableIterator<DataMessage<PortalData<TQuery>, true>> {
+    ): AsyncIterableIterator<BlockMessage<PortalData<TQuery>, true>> {
         let parentBlockHash: string | undefined
         let fromBlock = options.query.fromBlock ?? 0
         if (offset) {
@@ -68,7 +48,7 @@ export function portalDataSource<TQuery extends Query>(
 
                 const data = batch.blocks.map((value) => ({
                     value,
-                    cursor: BlockCursorUtils.fromBlock(value),
+                    cursor: {number: value.header.number, hash: value.header.hash},
                 }))
 
                 const cursor = last(data).cursor
@@ -94,9 +74,8 @@ export function portalDataSource<TQuery extends Query>(
         }
     }
 
-    return createSource({
+    return createBlockSource({
         unfinalized: true,
-        cursorUtils: BlockCursorUtils,
-        read: (opts) => createDataStream(opts.cursor),
+        read: (opts) => createBlockStream(opts.cursor),
     })
 }

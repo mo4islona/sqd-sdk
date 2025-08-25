@@ -7,7 +7,7 @@ import {createOrmConfig} from '@subsquid/typeorm-config'
 import {ChangeTracker, rollbackBlock} from './utils/hot'
 import type {DatabaseState, HashAndHeight} from './interfaces'
 import {def} from '@sqd-sdk/core/internal/def'
-import {createTarget, type DataFork, type Data, type DataBatch} from '@sqd-sdk/core/pipeline'
+import {createTarget, type DataFork, type Data, type DataBatch, createBlockTarget} from '@sqd-sdk/core/pipeline'
 
 export type IsolationLevel = 'SERIALIZABLE' | 'READ COMMITTED' | 'REPEATABLE READ'
 
@@ -304,7 +304,7 @@ export function createTypeormTarget<TValue>(
     databaseOpts: TypeormDatabaseOptions,
     handler: (store: Store, batch: TValue[]) => Promise<void>,
 ) {
-    return createTarget<Data<TValue, HashAndHeight>, true, never, Promise<void>>(() => {
+    return createBlockTarget<TValue, true, never, Promise<void>>(() => {
         return {
             unfinalized: true,
             write: async ({cursorUtils, read}) => {

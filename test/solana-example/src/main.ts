@@ -1,9 +1,9 @@
 import {HttpClient} from '@sqd-sdk/core/http-client'
-import {assert} from '@sqd-sdk/core/internal/misc'
+import {assert, maybeLast} from '@sqd-sdk/core/internal/misc'
 import {createLogger} from '@sqd-sdk/core/logger'
-import {createTransformer, stream, type Data, type DataDuplexFactory} from '@sqd-sdk/core/pipeline'
+import {type BlockDuplexFactory, createBlockTransformer, createTransformer, stream} from '@sqd-sdk/core/pipeline'
 import {PortalClient} from '@sqd-sdk/core/portal'
-import {solanaPortalDataSource} from '@sqd-sdk/solana-stream'
+import {SolanaPortalData, solanaPortalDataSource} from '@sqd-sdk/solana-stream'
 import {createTypeormTarget} from '@sqd-sdk/typeorm-store/lib/database'
 import * as tokenProgram from './abi/token-program'
 import * as whirlpool from './abi/whirlpool'
@@ -70,19 +70,6 @@ async function main() {
         //.pipe(createFinalizer())
         .pipe(createProgressTracker('solana'))
         .pipe(
-            createTransformer((opts) => {
-                return {
-                    unfinalized: opts.unfinalized,
-                    cursorUtils: opts.cursorUtils,
-                    transform: async function* (writeOpts, readOpts) {
-                        for await (const message of writeOpts.read(readOpts)) {
-                            yield message
-                        }
-                    },
-                }
-            }),
-        )
-        .pipe(
             createTypeormTarget({}, async (store, batch) => {
                 for (let block of batch) {
                     for (let ins of block.instructions) {
@@ -134,17 +121,14 @@ async function main() {
     console.log('end')
 }
 
-function createProgressTracker<
-    T extends Data<{header: {timestamp: number}}, {number: number}>,
-    TUnfinalized extends boolean,
-    TRequest,
->(prefix: string): DataDuplexFactory<T, T, TUnfinalized, TUnfinalized, TRequest, TRequest> {
+function createProgressTracker<T extends {header: {timestamp: number}}, TUnfinalized extends boolean, TRequest>(
+    prefix: string,
+): BlockDuplexFactory<T, T, TUnfinalized, TUnfinalized, TRequest, TRequest> {
     const logger = createLogger(`sqd:${prefix}`)
 
-    return createTransformer((opts) => {
+    return createBlockTransformer((opts) => {
         return {
             unfinalized: opts.unfinalized,
-            cursorUtils: opts.cursorUtils,
             transform: async function* (writeOpts, readOpts) {
                 if (readOpts.cursor) {
                     logger.info(`continue from ${readOpts.cursor.number}`)

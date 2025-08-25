@@ -1,5 +1,5 @@
 import {applyRangeBound, mergeRangeRequests, type Range} from '@sqd-sdk/core/internal/range/index'
-import {type Data, createSource, type DataSourceFactory, type DataMessage} from '@sqd-sdk/core/pipeline'
+import type {DataSourceFactory, DataMessage, BlockData, BlockSourceFactory, BlockMessage} from '@sqd-sdk/core/pipeline'
 import {
     type Block,
     blockFromPartial,
@@ -8,14 +8,9 @@ import {
     REQUIRED_FIELDS,
 } from './objects'
 import {mergeDataRequests, type SolanaDataRequestRange} from './query'
-import {
-    BlockCursorUtils,
-    type BlockRef,
-    type PortalClient,
-    type PortalClientOptions,
-    portalDataSource,
-} from '@sqd-sdk/core/portal'
+import {type PortalClient, type PortalClientOptions, portalDataSource} from '@sqd-sdk/core/portal'
 import {type MergeSelection, mergeSelection} from '@sqd-sdk/core/internal/selection'
+import {createBlockSource, type BlockRef} from '@sqd-sdk/core/pipeline'
 
 type GetFields<F extends FieldSelection> = MergeSelection<RequiredFieldSelection, F>
 
@@ -26,21 +21,21 @@ export interface SolanaPortalDataReaderOptions<F extends FieldSelection> {
     range?: Range
 }
 
-export type SolanaPortalData<F extends FieldSelection> = Data<Block<GetFields<F>>, BlockRef>
+export type SolanaPortalData<F extends FieldSelection> = Block<GetFields<F>>
 
 export function solanaPortalDataSource<F extends FieldSelection>(
     options: SolanaPortalDataReaderOptions<F>,
-): DataSourceFactory<SolanaPortalData<F>, true, SolanaDataRequestRange[]> {
+): BlockSourceFactory<SolanaPortalData<F>, true, SolanaDataRequestRange[]> {
     const fields = getFields(options.fields)
     let requests = mergeRangeRequests(options.request, mergeDataRequests)
     if (options.range) {
         requests = applyRangeBound(requests, options.range)
     }
 
-    const createDataStream = async function* (
+    const createBlockStream = async function* (
         cursor?: BlockRef,
         request?: SolanaDataRequestRange[],
-    ): AsyncIterableIterator<DataMessage<SolanaPortalData<F>, true>> {
+    ): AsyncIterableIterator<BlockMessage<SolanaPortalData<F>, true>> {
         const requestsBounded = cursor
             ? applyRangeBound(request ? mergeRangeRequests([...requests, ...request], mergeDataRequests) : requests, {
                   from: cursor.number + 1,
@@ -64,7 +59,7 @@ export function solanaPortalDataSource<F extends FieldSelection>(
                     case 'batch': {
                         yield {
                             type: 'batch',
-                            data: message.data.map((i): SolanaPortalData<F> => {
+                            data: message.data.map((i) => {
                                 const value = blockFromPartial<GetFields<F>>(i.value as any)
 
                                 return {
@@ -87,10 +82,9 @@ export function solanaPortalDataSource<F extends FieldSelection>(
         }
     }
 
-    return createSource({
+    return createBlockSource({
         unfinalized: true,
-        cursorUtils: BlockCursorUtils,
-        read: (opts) => createDataStream(opts.cursor, opts.request),
+        read: (opts) => createBlockStream(opts.cursor, opts.request),
     })
 }
 

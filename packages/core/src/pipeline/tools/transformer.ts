@@ -13,7 +13,7 @@ export interface DataTransformer<
     cursorUtils: DataCursorUtils<TOutputData['cursor']>
     transform: (
         writeOpts: DataWriteOptions<TInputData, TUnfinalized, TInputRequest>,
-        readOpts: DataReadOptions<TOutputData, TOutputRequest>,
+        readOpts: DataReadOptions<TOutputData['cursor'], TOutputRequest>,
     ) => AsyncIterableIterator<DataMessage<TOutputData, TUnfinalized>>
 }
 
