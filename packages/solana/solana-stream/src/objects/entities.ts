@@ -3,63 +3,8 @@ import {getInstructionDescriptor} from '../instruction'
 import type * as solana from '@sqd-sdk/core/portal/solana'
 import type * as base from './types'
 
-export function blockFromPartial<F extends base.FieldSelection>(src: solana.Block<F>): base.Block<F> {
-    const block = {} as base.Block<F>
-
-    block.header = Object.assign(new BlockHeader(), src.header)
-
-    const transactions = new Array(src.transactions.length)
-    for (let i = 0; i < src.transactions.length; i++) {
-        transactions[i] = Object.assign(new Transaction(), src.transactions[i])
-    }
-    block.transactions = transactions
-
-    const instructions = new Array(src.instructions.length)
-    for (let i = 0; i < src.instructions.length; i++) {
-        instructions[i] = Object.assign(new Instruction(), src.instructions[i])
-    }
-    block.instructions = instructions
-
-    const logs = new Array(src.logs.length)
-    for (let i = 0; i < src.logs.length; i++) {
-        logs[i] = Object.assign(new LogMessage(), src.logs[i])
-    }
-    block.logs = logs
-
-    const balances = new Array(src.balances.length)
-    for (let i = 0; i < src.balances.length; i++) {
-        balances[i] = Object.assign(new Balance(), src.balances[i])
-    }
-    block.balances = balances
-
-    const tokenBalances = new Array(src.tokenBalances.length)
-    for (let i = 0; i < src.tokenBalances.length; i++) {
-        tokenBalances[i] = Object.assign(new TokenBalance(), src.tokenBalances[i])
-    }
-    block.tokenBalances = tokenBalances
-
-    const rewards = new Array(src.rewards.length)
-    for (let i = 0; i < src.rewards.length; i++) {
-        rewards[i] = Object.assign(new Reward(), src.rewards[i])
-    }
-    block.rewards = rewards
-
-    return block
-}
-
-export class BlockHeader<F extends base.FieldSelection> implements base.BlockHeader {
-    #id?: string
-
-    get id(): string {
-        if (this.#id == null) {
-            this.#id = formatId(this, this.height)
-        }
-        return this.#id
-    }
-
-    set id(value: string) {
-        this.#id = value
-    }
+export class BlockHeader<F extends base.FieldSelection> {
+    id: string
 
     hash!: string
     number!: number
@@ -67,9 +12,23 @@ export class BlockHeader<F extends base.FieldSelection> implements base.BlockHea
     parentNumber!: number
     parentHash!: string
     timestamp!: number
+
+    #block!: base.Block<F>
+
+    constructor(raw: solana.BlockHeader<{hash: true; number: true}>, block: base.Block<F>) {
+        Object.assign(this, raw)
+        this.id = formatId(raw)
+        this.#block = block
+    }
+
+    get block(): base.Block<F> {
+        return this.#block
+    }
 }
 
-export class Transaction implements base.Transaction {
+export class Transaction<F extends base.FieldSelection> {
+    id: string
+
     transactionIndex!: number
     version!: number | 'legacy'
     accountKeys!: Base58[]
@@ -89,83 +48,57 @@ export class Transaction implements base.Transaction {
         writable: Base58[]
     }
 
-    #id?: string
-
-    get id(): string {
-        if (this.#id == null) {
-            this.#id = formatId(this.block.header, this.transactionIndex)
-        }
-        return this.#id
+    constructor(raw: solana.Transaction<{transactionIndex: true}>, block: base.Block<F>) {
+        Object.assign(this, raw)
+        this.id = formatId(block.header, raw.transactionIndex)
+        this.#block = block
     }
 
-    set id(value: string) {
-        this.#id = value
-    }
+    #block: base.Block<F>
 
-    #block!: base.Block
-
-    get block(): base.Block {
+    get block(): base.Block<F> {
         return this.#block
     }
 
-    set block(value: base.Block) {
-        this.#block = value
-    }
+    #instructions?: base.Instruction<F>[]
 
-    #instructions?: base.Instruction[]
-
-    get instructions(): base.Instruction[] {
+    get instructions(): base.Instruction<F>[] {
         if (this.#instructions == null) {
             this.#instructions = []
         }
         return this.#instructions
     }
 
-    set instructions(value: base.Instruction[]) {
-        this.#instructions = value
-    }
+    #balances?: base.Balance<F>[]
 
-    #balances?: base.Balance[]
-
-    get balances(): base.Balance[] {
+    get balances(): base.Balance<F>[] {
         if (this.#balances == null) {
             this.#balances = []
         }
         return this.#balances
     }
 
-    set balances(value: base.Balance[]) {
-        this.#balances = value
-    }
+    #tokenBalances?: base.TokenBalance<F>[]
 
-    #tokenBalances?: base.TokenBalance[]
-
-    get tokenBalances(): base.TokenBalance[] {
+    get tokenBalances(): base.TokenBalance<F>[] {
         if (this.#tokenBalances == null) {
             this.#tokenBalances = []
         }
         return this.#tokenBalances
     }
 
-    set tokenBalances(value: base.TokenBalance[]) {
-        this.#tokenBalances = value
-    }
+    #logs?: base.LogMessage<F>[]
 
-    #logs?: base.LogMessage[]
-
-    get logs(): base.LogMessage[] {
+    get logs(): base.LogMessage<F>[] {
         if (this.#logs == null) {
             this.#logs = []
         }
         return this.#logs
     }
-
-    set logs(value: base.LogMessage[]) {
-        this.#logs = value
-    }
 }
 
-export class Instruction implements base.Instruction {
+export class Instruction<F extends base.FieldSelection> {
+    id: string
     accounts!: Base58[]
     data!: Hex
     programId!: Base58
@@ -176,85 +109,73 @@ export class Instruction implements base.Instruction {
     isCommitted!: boolean
     hasDroppedLogMessages!: boolean
 
-    #id?: string
-    get id(): string {
-        if (this.#id == null) {
-            this.#id = formatId(this.block.header, this.transactionIndex, ...this.instructionAddress)
-        }
-        return this.#id
-    }
-    set id(value: string) {
-        this.#id = value
+    constructor(
+        raw: solana.Instruction<{transactionIndex: true; instructionAddress: true}>,
+        block: base.Block<F>,
+        transaction?: base.Transaction<F>,
+        parent?: base.Instruction<F>,
+    ) {
+        Object.assign(this, raw)
+        this.id = formatId(block.header, raw.transactionIndex, ...raw.instructionAddress)
+        this.#block = block
+        this.#transaction = transaction
+        this.#parent = parent
     }
 
-    #block!: base.Block
-    #transaction?: base.Transaction
-    #inner?: base.Instruction[]
-    #parent?: base.Instruction
-    #logs?: base.LogMessage[]
+    #block: base.Block<F>
+    #transaction?: base.Transaction<F>
+    #parent?: base.Instruction<F>
+
+    #inner?: base.Instruction<F>[]
+    #logs?: base.LogMessage<F>[]
+
     #d1?: string
     #d2?: string
     #d4?: string
     #d8?: string
 
-    get block(): base.Block {
+    get block(): base.Block<F> {
         return this.#block
     }
 
-    set block(value: base.Block) {
-        this.#block = value
-    }
-
-    get transaction(): base.Transaction | undefined {
+    get transaction(): base.Transaction<F> | undefined {
         return this.#transaction
     }
 
-    set transaction(value: base.Transaction | undefined) {
-        this.#transaction = value
-    }
-
-    getTransaction(): base.Transaction {
+    getTransaction(): base.Transaction<F> {
         if (this.#transaction == null) {
             throw new Error('Transaction is not set on instruction')
         }
         return this.#transaction
     }
 
-    get inner(): base.Instruction[] {
+    get inner(): base.Instruction<F>[] {
         if (this.#inner == null) {
             this.#inner = []
         }
         return this.#inner
     }
 
-    set inner(instructions: base.Instruction[]) {
+    set inner(instructions: base.Instruction<F>[]) {
         this.#inner = instructions
     }
 
-    get parent(): base.Instruction | undefined {
+    get parent(): base.Instruction<F> | undefined {
         return this.#parent
     }
 
-    getParent(): base.Instruction {
+    getParent(): base.Instruction<F> {
         if (this.#parent == null) {
             throw new Error('Parent instruction is not set')
         }
         return this.#parent
     }
 
-    set parent(value: base.Instruction | undefined) {
-        this.#parent = value
-    }
-
-    get logs(): base.LogMessage[] {
+    get logs(): base.LogMessage<F>[] {
         if (this.#logs == null) {
             this.#logs = []
         }
         return this.#logs
-    }
-
-    set logs(value: base.LogMessage[]) {
-        this.#logs = value
     }
 
     get d1(): Hex {
@@ -284,7 +205,8 @@ export class Instruction implements base.Instruction {
     }
 }
 
-export class LogMessage implements base.LogMessage {
+export class LogMessage<F extends base.FieldSelection> {
+    id: string
     transactionIndex!: number
     logIndex!: number
     instructionAddress!: number[]
@@ -292,55 +214,43 @@ export class LogMessage implements base.LogMessage {
     kind!: 'log' | 'data' | 'other'
     message!: string
 
-    #id?: string
-
-    get id(): string {
-        if (this.#id == null) {
-            this.#id = formatId(this.block.header, this.transactionIndex, this.logIndex)
-        }
-        return this.#id
+    constructor(
+        raw: solana.LogMessage<{transactionIndex: true; logIndex: true}>,
+        block: base.Block<F>,
+        transaction?: base.Transaction<F>,
+        instruction?: base.Instruction<F>,
+    ) {
+        Object.assign(this, raw)
+        this.id = formatId(block.header, raw.transactionIndex, raw.logIndex)
+        this.#block = block
+        this.#transaction = transaction
+        this.#instruction = instruction
     }
 
-    set id(value: string) {
-        this.#id = value
-    }
+    #block: base.Block<F>
+    #transaction?: base.Transaction<F>
+    #instruction?: base.Instruction<F>
 
-    #block!: base.Block
-    #transaction?: base.Transaction
-    #instruction?: base.Instruction
-
-    get block(): base.Block {
+    get block(): base.Block<F> {
         return this.#block
     }
 
-    set block(value: base.Block) {
-        this.#block = value
-    }
-
-    get transaction(): base.Transaction | undefined {
+    get transaction(): base.Transaction<F> | undefined {
         return this.#transaction
     }
 
-    set transaction(value: base.Transaction | undefined) {
-        this.#transaction = value
-    }
-
-    getTransaction(): base.Transaction {
+    getTransaction(): base.Transaction<F> {
         if (this.#transaction == null) {
             throw new Error('Transaction is not set on log message')
         }
         return this.#transaction
     }
 
-    get instruction(): base.Instruction | undefined {
+    get instruction(): base.Instruction<F> | undefined {
         return this.#instruction
     }
 
-    set instruction(value: base.Instruction | undefined) {
-        this.#instruction = value
-    }
-
-    getInstruction(): base.Instruction {
+    getInstruction(): base.Instruction<F> {
         if (this.#instruction == null) {
             throw new Error('Instruction is not set on log message')
         }
@@ -348,45 +258,36 @@ export class LogMessage implements base.LogMessage {
     }
 }
 
-export class Balance implements base.Balance {
+export class Balance<F extends base.FieldSelection> {
+    id: string
     transactionIndex!: number
     account!: Base58
     pre!: bigint
     post!: bigint
 
-    #id?: string
-
-    get id(): string {
-        if (this.#id == null) {
-            this.#id = `${formatId(this.block.header, this.transactionIndex)}-${this.account}`
-        }
-        return this.#id
+    constructor(
+        raw: solana.Balance<{transactionIndex: true; account: true}>,
+        block: base.Block<F>,
+        transaction?: base.Transaction<F>,
+    ) {
+        Object.assign(this, raw)
+        this.id = `${formatId(block.header, raw.transactionIndex)}-${raw.account}`
+        this.#block = block
+        this.#transaction = transaction
     }
 
-    set id(value: string) {
-        this.#id = value
-    }
+    #block: base.Block<F>
+    #transaction?: base.Transaction<F>
 
-    #block!: base.Block
-    #transaction?: base.Transaction
-
-    get block(): base.Block {
+    get block(): base.Block<F> {
         return this.#block
     }
 
-    set block(value: base.Block) {
-        this.#block = value
-    }
-
-    get transaction(): base.Transaction | undefined {
+    get transaction(): base.Transaction<F> | undefined {
         return this.#transaction
     }
 
-    set transaction(value: base.Transaction | undefined) {
-        this.#transaction = value
-    }
-
-    getTransaction(): base.Transaction {
+    getTransaction(): base.Transaction<F> {
         if (this.#transaction == null) {
             throw new Error('Transaction is not set on balance change record')
         }
@@ -394,84 +295,69 @@ export class Balance implements base.Balance {
     }
 }
 
-export class TokenBalance implements base.TokenBalance {
+export class TokenBalance<F extends base.FieldSelection> {
+    id!: string
     transactionIndex!: number
     account!: Base58
-    postAmount?: bigint | undefined
-    postDecimals?: number | undefined
-    postMint?: Base58 | undefined
-    postOwner?: Base58 | undefined
-    preAmount?: bigint | undefined
-    preDecimals?: number | undefined
-    preMint?: Base58 | undefined
-    preOwner?: Base58 | undefined
-    preProgramId?: Base58 | undefined
-    postProgramId?: Base58 | undefined
+    preAmount!: bigint
+    preDecimals!: number
+    preMint!: Base58
+    preOwner!: Base58
+    preProgramId!: Base58
+    postAmount!: bigint
+    postDecimals!: number
+    postMint!: Base58
+    postOwner!: Base58
+    postProgramId!: Base58
 
-    #id?: string
-
-    get id(): string {
-        if (this.#id == null) {
-            this.#id = `${formatId(this.block.header, this.transactionIndex)}-${this.account}`
-        }
-        return this.#id
+    constructor(
+        raw: solana.TokenBalance<{transactionIndex: true; account: true}>,
+        block: base.Block<F>,
+        transaction?: base.Transaction<F>,
+    ) {
+        Object.assign(this, raw)
+        this.id = `${formatId(block.header, raw.transactionIndex)}-${raw.account}`
+        this.#block = block
+        this.#transaction = transaction
     }
 
-    set id(value: string) {
-        this.#id = value
-    }
+    #block: base.Block<F>
+    #transaction?: base.Transaction<F>
 
-    #block!: base.Block
-    #transaction?: base.Transaction
-
-    get block(): base.Block {
+    get block(): base.Block<F> {
         return this.#block
     }
 
-    set block(value: base.Block) {
-        this.#block = value
-    }
-
-    get transaction(): base.Transaction | undefined {
+    get transaction(): base.Transaction<F> | undefined {
         return this.#transaction
     }
 
-    set transaction(value: base.Transaction | undefined) {
-        this.#transaction = value
-    }
-
-    getTransaction(): base.Transaction {
+    getTransaction(): base.Transaction<F> {
         if (this.#transaction == null) {
-            throw new Error('Transaction is not set on balance change record')
+            throw new Error('Transaction is not set on pre post token balance record')
         }
         return this.#transaction
     }
 }
 
-export class Reward implements base.Reward {
+export class Reward<F extends base.FieldSelection> {
+    id!: string
     pubkey!: Base58
     commission?: number
     lamports!: bigint
     postBalance!: bigint
     rewardType?: string
 
-    #id?: string
-
-    get id(): string {
-        if (this.#id == null) {
-            this.#id = `${formatId(this.block.header)}-${this.pubkey}`
-        }
-        return this.#id
+    constructor(raw: solana.Reward<{pubkey: true}>, block: base.Block<F>) {
+        Object.assign(this, raw)
+        this.id = `${formatId(block.header)}-${raw.pubkey}`
+        this.#block = block
     }
 
-    #block!: base.Block
+    #block!: base.Block<F>
 
-    get block(): base.Block {
+    get block(): base.Block<F> {
         return this.#block
-    }
-
-    set block(value: base.Block) {
-        this.#block = value
     }
 }
 

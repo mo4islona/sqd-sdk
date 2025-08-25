@@ -1,2 +1,2 @@
-export * from './types'
-export {blockFromPartial} from './entities'
+export type * from './types'
+export * from './relations'

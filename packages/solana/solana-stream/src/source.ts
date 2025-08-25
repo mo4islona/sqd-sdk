@@ -1,18 +1,10 @@
 import {applyRangeBound, mergeRangeRequests, type Range} from '@sqd-sdk/core/internal/range/index'
-import type {DataSourceFactory, DataMessage, BlockData, BlockSourceFactory, BlockMessage} from '@sqd-sdk/core/pipeline'
-import {
-    type Block,
-    blockFromPartial,
-    type FieldSelection,
-    type RequiredFieldSelection,
-    REQUIRED_FIELDS,
-} from './objects'
+import type {BlockSourceFactory, BlockMessage} from '@sqd-sdk/core/pipeline'
+import {createBlock, type Block, type FieldSelection, type RequiredFieldSelection} from './objects'
 import {mergeDataRequests, type SolanaDataRequestRange} from './query'
 import {type PortalClient, type PortalClientOptions, portalDataSource} from '@sqd-sdk/core/portal'
-import {type MergeSelection, mergeSelection} from '@sqd-sdk/core/internal/selection'
 import {createBlockSource, type BlockRef} from '@sqd-sdk/core/pipeline'
-
-type GetFields<F extends FieldSelection> = MergeSelection<RequiredFieldSelection, F>
+import type * as solana from '@sqd-sdk/core/portal/solana'
 
 export interface SolanaPortalDataReaderOptions<F extends FieldSelection> {
     portal: PortalClientOptions | PortalClient
@@ -21,12 +13,9 @@ export interface SolanaPortalDataReaderOptions<F extends FieldSelection> {
     range?: Range
 }
 
-export type SolanaPortalData<F extends FieldSelection> = Block<GetFields<F>>
-
 export function solanaPortalDataSource<F extends FieldSelection>(
     options: SolanaPortalDataReaderOptions<F>,
-): BlockSourceFactory<SolanaPortalData<F>, true, SolanaDataRequestRange[]> {
-    const fields = getFields(options.fields)
+): BlockSourceFactory<Block<F>, true, SolanaDataRequestRange[]> {
     let requests = mergeRangeRequests(options.request, mergeDataRequests)
     if (options.range) {
         requests = applyRangeBound(requests, options.range)
@@ -35,12 +24,14 @@ export function solanaPortalDataSource<F extends FieldSelection>(
     const createBlockStream = async function* (
         cursor?: BlockRef,
         request?: SolanaDataRequestRange[],
-    ): AsyncIterableIterator<BlockMessage<SolanaPortalData<F>, true>> {
+    ): AsyncIterableIterator<BlockMessage<Block<F>, true>> {
         const requestsBounded = cursor
             ? applyRangeBound(request ? mergeRangeRequests([...requests, ...request], mergeDataRequests) : requests, {
                   from: cursor.number + 1,
               })
             : requests
+
+        const fields = toPortalFieldSelection(options.fields)
 
         for (const request of requestsBounded) {
             const portalSource = portalDataSource({
@@ -60,7 +51,7 @@ export function solanaPortalDataSource<F extends FieldSelection>(
                         yield {
                             type: 'batch',
                             data: message.data.map((i) => {
-                                const value = blockFromPartial<GetFields<F>>(i.value as any)
+                                const value = createBlock<F>(i.value)
 
                                 return {
                                     cursor: i.cursor,
@@ -88,6 +79,41 @@ export function solanaPortalDataSource<F extends FieldSelection>(
     })
 }
 
-function getFields<T extends FieldSelection>(fields: T): GetFields<T> {
-    return mergeSelection(REQUIRED_FIELDS, fields)
+function toPortalFieldSelection<T extends FieldSelection>(fields: T) {
+    return {
+        block: {
+            ...fields.block,
+            number: true,
+            hash: true,
+        },
+        transaction: {
+            ...fields.transaction,
+            transactionIndex: true,
+        },
+        log: {
+            ...fields.log,
+            transactionIndex: true,
+            logIndex: true,
+            instructionAddress: true,
+        },
+        instruction: {
+            ...fields.instruction,
+            transactionIndex: true,
+            instructionAddress: true,
+        },
+        balance: {
+            ...fields.balance,
+            account: true,
+            transactionIndex: true,
+        },
+        tokenBalance: {
+            ...fields.tokenBalance,
+            account: true,
+            transactionIndex: true,
+        },
+        reward: {
+            ...fields.reward,
+            pubkey: true,
+        },
+    } satisfies solana.FieldSelection
 }
