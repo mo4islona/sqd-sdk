@@ -6,7 +6,7 @@
 //     type DataSource,
 //     type DataTarget,
 //     type DataTargetFactoryOptions,
-//     type ReadOptions,
+//     type DataReadOptions,
 //     type Stream,
 // } from './core'
 import {DataCursor, type DataCursorUtils} from './cursor'
@@ -77,9 +77,9 @@ export const BlockRefUtils = {
 //     transform: (
 //         write: {
 //             cursorUtils: DataCursorUtils<BlockRef>
-//             read: (opts: ReadOptions<BlockRef, TRequest>) => AsyncIterable<DataMessage<BlockRef, TInputValue>>
+//             read: (opts: DataReadOptions<BlockRef, TRequest>) => AsyncIterable<DataMessage<BlockRef, TInputValue>>
 //         },
-//         read: ReadOptions<BlockRef, TResult>,
+//         read: DataReadOptions<BlockRef, TResult>,
 //     ) => AsyncIterableIterator<DataMessage<BlockRef, TOutputValue>>
 // }
 
@@ -99,7 +99,7 @@ export const BlockRefUtils = {
 //                     createSource<BlockRef, TOutputValue, TResult>({
 //                         unfinalized: transformer.unfinalized,
 //                         cursorUtils: BlockRefUtils,
-//                         read: (readOpts: ReadOptions<BlockRef, TResult>) =>
+//                         read: (readOpts: DataReadOptions<BlockRef, TResult>) =>
 //                             transformer.transform(
 //                                 {
 //                                     cursorUtils: writeOpts.cursorUtils,

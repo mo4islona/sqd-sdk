@@ -2,14 +2,19 @@ import type {DataCursorUtils} from '../cursor'
 import {
     createSource,
     createTarget,
-    stream,
     type DataTargetFactoryOptions,
-    type ReadOptions,
-    type DataMessage,
-    type Stream,
+    type DataStream,
+    createStream,
+    type DataWriteOptions,
+    type DataTarget,
+    type DataDuplex,
 } from '../core'
 
-export interface DataTransformer<
+export type DataTransform<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInputRequest, TOutputRequest> = (
+    opts: DataWriteOptions<TInputCursor, TInputValue, TInputRequest>,
+) => DataWriteOptions<TOutputCursor, TOutputValue, TOutputRequest>
+
+export interface DataTransformerConfig<
     TInputCursor,
     TOutputCursor,
     TInputValue,
@@ -17,29 +22,9 @@ export interface DataTransformer<
     TInputRequest,
     TOutputRequest,
 > {
-    unfinalized: boolean
-    cursorUtils: DataCursorUtils<TOutputCursor>
-    transform: (
-        write: {
-            cursorUtils: DataCursorUtils<TInputCursor>
-            read: (
-                opts: ReadOptions<TInputCursor, TInputRequest>,
-            ) => AsyncIterable<DataMessage<TInputCursor, TInputValue>>
-        },
-        read: ReadOptions<TOutputCursor, TOutputRequest>,
-    ) => AsyncIterableIterator<DataMessage<TOutputCursor, TOutputValue>>
+    unfinalized?: boolean
+    transform: DataTransform<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInputRequest, TOutputRequest>
 }
-
-export type DataTransformerFactory<
-    TInputCursor,
-    TOutputCursor,
-    TInputValue,
-    TOutputValue,
-    TInputRequest,
-    TOutputRequest,
-> = (
-    opts: DataTargetFactoryOptions & {cursorUtils: DataCursorUtils<TInputCursor>},
-) => DataTransformer<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInputRequest, TOutputRequest>
 
 export function createTransformer<
     TInputCursor,
@@ -49,7 +34,19 @@ export function createTransformer<
     TInputRequest = never,
     TOutputRequest = TInputRequest,
 >(
-    transformerFactory: DataTransformerFactory<
+    transform: DataTransform<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInputRequest, TOutputRequest>,
+): (
+    opts: DataTargetFactoryOptions,
+) => DataDuplex<TInputCursor, TInputValue, TInputRequest, TOutputCursor, TOutputValue, TOutputRequest>
+export function createTransformer<
+    TInputCursor,
+    TOutputCursor = TInputCursor,
+    TInputValue = unknown,
+    TOutputValue = TInputValue,
+    TInputRequest = never,
+    TOutputRequest = TInputRequest,
+>(
+    config: DataTransformerConfig<
         TInputCursor,
         TOutputCursor,
         TInputValue,
@@ -57,35 +54,44 @@ export function createTransformer<
         TInputRequest,
         TOutputRequest
     >,
+): DataDuplex<TInputCursor, TInputValue, TInputRequest, TOutputCursor, TOutputValue, TOutputRequest>
+export function createTransformer<
+    TInputCursor,
+    TOutputCursor = TInputCursor,
+    TInputValue = unknown,
+    TOutputValue = TInputValue,
+    TInputRequest = never,
+    TOutputRequest = TInputRequest,
+>(
+    transformOrConfig:
+        | DataTransform<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInputRequest, TOutputRequest>
+        | DataTransformerConfig<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInputRequest, TOutputRequest>,
 ) {
-    return createTarget<TInputCursor, TInputValue, TInputRequest, Stream<TOutputCursor, TOutputValue, TOutputRequest>>(
-        (opts: DataTargetFactoryOptions) => {
-            return {
+    if (typeof transformOrConfig === 'function') {
+        return (opts: DataTargetFactoryOptions) =>
+            createTransformer({
                 unfinalized: opts.unfinalized,
-                write: (writeOpts) => {
-                    const transformer = transformerFactory({
-                        cursorUtils: writeOpts.cursorUtils,
-                        unfinalized: opts.unfinalized,
-                    })
-                    return stream(() =>
-                        createSource({
-                            unfinalized: transformer.unfinalized,
-                            cursorUtils: transformer.cursorUtils,
-                            read: (readOpts) =>
-                                transformer.transform(
-                                    {
-                                        cursorUtils: writeOpts.cursorUtils,
-                                        read: writeOpts.read,
-                                    },
-                                    {
-                                        cursor: readOpts.cursor,
-                                        request: readOpts.request,
-                                    },
-                                ),
-                        }),
-                    )
-                },
-            }
+                transform: transformOrConfig,
+            })
+    }
+
+    return createTarget<
+        TInputCursor,
+        TInputValue,
+        TInputRequest,
+        DataStream<TOutputCursor, TOutputValue, TOutputRequest>
+    >({
+        unfinalized: transformOrConfig.unfinalized,
+        write: (writeOpts) => {
+            const {cursorUtils, read} = transformOrConfig.transform(writeOpts)
+
+            return createStream(
+                createSource({
+                    unfinalized: transformOrConfig.unfinalized,
+                    cursorUtils,
+                    read,
+                }),
+            )
         },
-    )
+    })
 }

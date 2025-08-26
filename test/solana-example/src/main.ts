@@ -1,7 +1,7 @@
 import {HttpClient} from '@sqd-sdk/core/http-client'
 import {assert} from '@sqd-sdk/core/internal/misc'
 import {createLogger} from '@sqd-sdk/core/logger'
-import {type BlockRef, createTransformer, stream} from '@sqd-sdk/core/pipeline'
+import {type BlockRef, createTransformer, createStream, type DataReadOptions} from '@sqd-sdk/core/pipeline'
 import {PortalClient} from '@sqd-sdk/core/portal'
 import {solanaPortalDataSource} from '@sqd-sdk/solana-stream'
 import {createTypeormTarget} from '@sqd-sdk/typeorm-store/lib/database'
@@ -24,7 +24,7 @@ async function main() {
 
     console.log(`processing range: [${fromBlock}, ${toBlock ?? null}]`)
 
-    await stream(() =>
+    await createStream(() =>
         solanaPortalDataSource({
             portal,
             fields: {
@@ -69,34 +69,29 @@ async function main() {
     )
         //.pipe(createFinalizer())
         .pipe(
-            createTransformer((opts) => {
-                return {
-                    unfinalized: opts.unfinalized,
-                    cursorUtils: opts.cursorUtils,
-                    transform: async function* (writeOpts, readOpts) {
-                        for await (const message of writeOpts.read({
-                            cursor: readOpts.cursor ? {number: readOpts.cursor.number, hash: ''} : undefined,
-                        })) {
-                            switch (message.type) {
-                                case 'batch':
-                                    yield {
-                                        type: 'batch',
-                                        cursor: message.cursor,
-                                        head: message.head,
-                                        finalizedHead: message.finalizedHead,
-                                        data: message.data.map((d) => ({
-                                            cursor: d.cursor,
-                                            value: d.value,
-                                        })),
-                                    }
-                                    break
-                                default:
-                                    yield message
-                            }
+            createTransformer((writeOpts) => ({
+                cursorUtils: writeOpts.cursorUtils,
+                read: async function* (readOpts) {
+                    for await (const message of writeOpts.read(readOpts)) {
+                        switch (message.type) {
+                            case 'batch':
+                                yield {
+                                    type: 'batch',
+                                    cursor: message.cursor,
+                                    head: message.head,
+                                    finalizedHead: message.finalizedHead,
+                                    data: message.data.map((d) => ({
+                                        cursor: d.cursor,
+                                        value: d.value,
+                                    })),
+                                }
+                                break
+                            default:
+                                yield message
                         }
-                    },
-                }
-            }),
+                    }
+                },
+            })),
         )
         .pipe(createProgressTracker('solana'))
         .pipe(
@@ -154,40 +149,37 @@ async function main() {
 function createProgressTracker<T extends {header: {timestamp: number}}, TRequest>(prefix: string) {
     const logger = createLogger(`sqd:${prefix}`)
 
-    return createTransformer<BlockRef, BlockRef, T, T, TRequest, TRequest>((opts) => {
-        return {
-            unfinalized: opts.unfinalized,
-            cursorUtils: opts.cursorUtils,
-            transform: async function* (writeOpts, readOpts) {
-                if (readOpts.cursor) {
-                    logger.info(`continue from ${readOpts.cursor.number}`)
+    return createTransformer<BlockRef, BlockRef, T, T, TRequest, TRequest>((writeOpts) => ({
+        cursorUtils: writeOpts.cursorUtils,
+        read: async function* (readOpts) {
+            if (readOpts.cursor) {
+                logger.info(`continue from ${readOpts.cursor.number}`)
+            }
+
+            for await (const message of writeOpts.read(readOpts)) {
+                switch (message.type) {
+                    case 'batch':
+                        if (message.data.length > 0) {
+                            const {cursor, head, finalizedHead, data} = message
+                            logger.info(
+                                [
+                                    `progress: ${cursor.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
+                                    `blocks: ${message.data.length}, lag: ${(
+                                        (Date.now() - data[data.length - 1].value.header.timestamp * 1000) / 1000
+                                    ).toFixed(2)}s`,
+                                ].join(', '),
+                            )
+                        }
+                        break
+                    case 'fork':
+                        logger.info(`fork: ${message.cursors[message.cursors.length - 1].number}`)
+                        break
                 }
 
-                for await (const message of writeOpts.read(readOpts)) {
-                    switch (message.type) {
-                        case 'batch':
-                            if (message.data.length > 0) {
-                                const {cursor, head, finalizedHead, data} = message
-                                logger.info(
-                                    [
-                                        `progress: ${cursor.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
-                                        `blocks: ${message.data.length}, lag: ${(
-                                            (Date.now() - data[data.length - 1].value.header.timestamp * 1000) / 1000
-                                        ).toFixed(2)}s`,
-                                    ].join(', '),
-                                )
-                            }
-                            break
-                        case 'fork':
-                            logger.info(`fork: ${message.cursors[message.cursors.length - 1].number}`)
-                            break
-                    }
-
-                    yield message
-                }
-            },
-        }
-    })
+                yield message
+            }
+        },
+    }))
 }
 
 function formatId(block: {number: number; hash: string}, ...address: number[]): string {

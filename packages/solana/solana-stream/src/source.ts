@@ -1,5 +1,5 @@
 import {applyRangeBound, mergeRangeRequests, type Range} from '@sqd-sdk/core/internal/range/index'
-import {BlockRefUtils, createSource, type ReadOptions, type BlockRef, type DataMessage} from '@sqd-sdk/core/pipeline'
+import {BlockRefUtils, createSource, type DataReadOptions, type BlockRef, type DataMessage} from '@sqd-sdk/core/pipeline'
 import {createBlock, type Block, type FieldSelection, type RequiredFieldSelection} from './objects'
 import {mergeDataRequests, type SolanaDataRequestRange} from './query'
 import {type PortalClient, type PortalClientOptions, portalDataSource} from '@sqd-sdk/core/portal'
@@ -73,7 +73,7 @@ export function solanaPortalDataSource<F extends FieldSelection>(options: Solana
     return createSource({
         unfinalized: true,
         cursorUtils: BlockRefUtils,
-        read: (opts: ReadOptions<BlockRef, SolanaDataRequestRange[]>) => createBlockStream(opts.cursor, opts.request),
+        read: (opts: DataReadOptions<BlockRef, SolanaDataRequestRange[]>) => createBlockStream(opts.cursor, opts.request),
     })
 }
 

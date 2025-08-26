@@ -22,7 +22,7 @@ export interface DataForkMessage<TCursor> {
 
 export type DataMessage<TCursor, TValue> = DataBatchMessage<TCursor, TValue> | DataForkMessage<TCursor>
 
-export interface ReadOptions<TCursor, TRequest> {
+export interface DataReadOptions<TCursor, TRequest> {
     cursor?: TCursor
     request?: TRequest
 }
@@ -30,70 +30,92 @@ export interface ReadOptions<TCursor, TRequest> {
 export interface DataSource<TCursor, TValue, TRequest> {
     unfinalized: boolean
     cursorUtils: DataCursorUtils<TCursor>
-    read(options: ReadOptions<TCursor, TRequest>): AsyncIterable<DataMessage<TCursor, TValue>>
+    read(options: DataReadOptions<TCursor, TRequest>): AsyncIterable<DataMessage<TCursor, TValue>>
 }
 
-export interface WriteContext<TCursor, TValue, TRequest> {
+export interface DataWriteOptions<TCursor, TValue, TRequest> {
     cursorUtils: DataCursorUtils<TCursor>
-    read(options: ReadOptions<TCursor, TRequest>): AsyncIterable<DataMessage<TCursor, TValue>>
+    read(options: DataReadOptions<TCursor, TRequest>): AsyncIterable<DataMessage<TCursor, TValue>>
 }
 
 export interface DataTarget<TCursor, TValue, TRequest, TReturn> {
     unfinalized: boolean
-    write(context: WriteContext<TCursor, TValue, TRequest>): TReturn
+    write(context: DataWriteOptions<TCursor, TValue, TRequest>): TReturn
 }
 
 export interface DataTargetFactoryOptions {
     unfinalized: boolean
 }
 
-export interface PipeOptions {
+export interface DataPipeOptions {
     validateBatches?: boolean
 }
 
+export interface DataSourceConfig<TCursor, TValue, TRequest> {
+    unfinalized?: boolean
+    cursorUtils: DataCursorUtils<TCursor>
+    read(options: DataReadOptions<TCursor, TRequest>): AsyncIterable<DataMessage<TCursor, TValue>>
+}
+
 export function createSource<TCursor, TValue, TRequest>(
-    source: DataSource<TCursor, TValue, TRequest>,
+    source: DataSourceConfig<TCursor, TValue, TRequest>,
 ): DataSource<TCursor, TValue, TRequest> {
-    return source
+    return {
+        unfinalized: source.unfinalized ?? true,
+        cursorUtils: source.cursorUtils,
+        read: (opts) => source.read(opts),
+    }
+}
+
+export interface DataTargetConfig<TCursor, TValue, TRequest, TReturn> {
+    unfinalized?: boolean
+    write(context: DataWriteOptions<TCursor, TValue, TRequest>): TReturn
 }
 
 export function createTarget<TCursor, TValue, TRequest, TReturn>(
-    target: DataTarget<TCursor, TValue, TRequest, TReturn>,
+    config: DataTargetConfig<TCursor, TValue, TRequest, TReturn>,
 ): DataTarget<TCursor, TValue, TRequest, TReturn>
 export function createTarget<TCursor, TValue, TRequest, TReturn>(
-    factory: (opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TRequest, TReturn>,
+    factory: (opts: DataTargetFactoryOptions) => DataTargetConfig<TCursor, TValue, TRequest, TReturn>,
 ): (opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TRequest, TReturn>
 export function createTarget<TCursor, TValue, TRequest, TReturn>(
-    targetOrFactory:
-        | DataTarget<TCursor, TValue, TRequest, TReturn>
-        | ((opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TRequest, TReturn>),
+    configOrFactory:
+        | DataTargetConfig<TCursor, TValue, TRequest, TReturn>
+        | ((opts: DataTargetFactoryOptions) => DataTargetConfig<TCursor, TValue, TRequest, TReturn>),
 ):
     | DataTarget<TCursor, TValue, TRequest, TReturn>
     | ((opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TRequest, TReturn>) {
-    if (typeof targetOrFactory === 'function') {
-        return targetOrFactory
+    if (typeof configOrFactory === 'function') {
+        return (opts: DataTargetFactoryOptions) => createTarget(configOrFactory(opts))
     }
 
-    return targetOrFactory
+    return {
+        unfinalized: configOrFactory.unfinalized ?? true,
+        write: (opts) => configOrFactory.write(opts),
+    }
 }
 
-export interface Stream<TCursor, TValue, TRequest> {
+export type DataDuplex<TInputCursor, TInputValue, TInputRequest, TOutputCursor, TOutputValue, TOutputRequest> =
+    DataTarget<TInputCursor, TInputValue, TInputRequest, DataStream<TOutputCursor, TOutputValue, TOutputRequest>>
+
+export interface DataStream<TCursor, TValue, TRequest> {
     pipe<TReturn>(
         targetOrFactory:
             | DataTarget<TCursor, TValue, TRequest, TReturn>
             | ((opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TRequest, TReturn>),
-        opts?: PipeOptions,
+        opts?: DataPipeOptions,
     ): TReturn
 
-    [Symbol.asyncIterator](opts?: ReadOptions<TCursor, TRequest>): AsyncIterable<TValue>
+    [Symbol.asyncIterator](opts?: DataReadOptions<TCursor, TRequest>): AsyncIterable<TValue>
 }
 
-export function stream<TCursor, TValue, TRequest>(
-    sourceFactory: () => DataSource<TCursor, TValue, TRequest>,
-): Stream<TCursor, TValue, TRequest> {
+export function createStream<TCursor, TValue, TRequest>(
+    sourceOrFactory: DataSource<TCursor, TValue, TRequest> | (() => DataSource<TCursor, TValue, TRequest>),
+): DataStream<TCursor, TValue, TRequest> {
+    const source = typeof sourceOrFactory === 'function' ? sourceOrFactory() : sourceOrFactory
+
     return {
-        pipe: (targetOrFactory, opts: PipeOptions = {}) => {
-            const source = sourceFactory()
+        pipe: (targetOrFactory, opts: DataPipeOptions = {}) => {
             const target =
                 typeof targetOrFactory === 'function'
                     ? targetOrFactory({unfinalized: source.unfinalized})
@@ -101,15 +123,14 @@ export function stream<TCursor, TValue, TRequest>(
 
             return pipe(source, target, opts)
         },
-        [Symbol.asyncIterator]: (opts?: ReadOptions<TCursor, TRequest>): AsyncIterable<TValue> => {
-            const source = sourceFactory()
+        [Symbol.asyncIterator]: (opts?: DataReadOptions<TCursor, TRequest>): AsyncIterable<TValue> => {
             return pipe(
                 source,
                 {
                     unfinalized: source.unfinalized,
-                    write: async function* (streamOpts: WriteContext<TCursor, TValue, TRequest>) {
+                    write: async function* (streamOpts: DataWriteOptions<TCursor, TValue, TRequest>) {
                         for await (const message of streamOpts.read(
-                            (opts ?? {cursor: undefined, request: undefined}) as ReadOptions<TCursor, TRequest>,
+                            (opts ?? {cursor: undefined, request: undefined}) as DataReadOptions<TCursor, TRequest>,
                         )) {
                             switch (message.type) {
                                 case 'batch':
@@ -132,7 +153,7 @@ export function stream<TCursor, TValue, TRequest>(
 function pipe<TCursor, TValue, TRequest, TReturn>(
     source: DataSource<TCursor, TValue, TRequest>,
     target: DataTarget<TCursor, TValue, TRequest, TReturn>,
-    opts: PipeOptions,
+    opts: DataPipeOptions,
 ): TReturn {
     if (source.unfinalized && !target.unfinalized) {
         throw new TypeError('Cannot pipe from unfinalized DataSource to finalized DataTarget')
@@ -141,7 +162,7 @@ function pipe<TCursor, TValue, TRequest, TReturn>(
     return target.write({
         cursorUtils: source.cursorUtils,
         read: async function* (
-            streamOpts: ReadOptions<TCursor, TRequest>,
+            streamOpts: DataReadOptions<TCursor, TRequest>,
         ): AsyncIterable<DataMessage<TCursor, TValue>> {
             let offset = streamOpts.cursor
 

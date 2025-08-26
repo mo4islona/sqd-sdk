@@ -2,12 +2,11 @@ import type {DataCursorUtils} from '../cursor'
 import {
     createSource,
     createTarget,
-    stream,
-    type DataTargetFactoryOptions,
+    createStream,
     type DataBatchMessage,
     type DataBatchItem,
     type DataForkMessage,
-    type Stream,
+    type DataStream,
 } from '../core'
 import {maybeLast} from '../../internal/misc'
 
@@ -159,18 +158,18 @@ function handleFork<TCursor, TValue>({
 }
 
 export function createFinalizer<TCursor, TValue, TRequest>() {
-    return createTarget<TCursor, TValue, TRequest, Stream<TCursor, TValue, TRequest>>({
+    return createTarget<TCursor, TValue, TRequest, DataStream<TCursor, TValue, TRequest>>({
         unfinalized: true,
-        write: (writeOptions) => {
-            return stream(() =>
+        write: (writeOptions) =>
+            createStream(
                 createSource({
                     unfinalized: false,
                     cursorUtils: writeOptions.cursorUtils,
-                    read: async function* (readOptions) {
+                    read: async function* (DataReadOptions) {
                         let finalizedCursor: TCursor | undefined
                         let buffer: DataBatchItem<TCursor, TValue>[] = []
 
-                        for await (const message of writeOptions.read(readOptions)) {
+                        for await (const message of writeOptions.read(DataReadOptions)) {
                             switch (message.type) {
                                 case 'batch': {
                                     const result = handleBatch({
@@ -201,7 +200,6 @@ export function createFinalizer<TCursor, TValue, TRequest>() {
                         }
                     },
                 }),
-            )
-        },
+            ),
     })
 }
