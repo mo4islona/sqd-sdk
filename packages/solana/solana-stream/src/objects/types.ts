@@ -1,6 +1,7 @@
-import type {Simplify} from '@sqd-sdk/core/internal/types/misc'
+import type * as Solana from '@sqd-sdk/core/portal/solana'
 import type {Trues, Select, Selector} from '@sqd-sdk/core/internal/selection'
 import type {Hex, Base58} from '@sqd-sdk/core/internal/types/primitive'
+import type {Simplify} from '@sqd-sdk/core/internal/types/misc'
 
 type Id = {id: string}
 
