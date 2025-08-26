@@ -1,9 +1,9 @@
 import {HttpClient} from '@sqd-sdk/core/http-client'
-import {assert, maybeLast} from '@sqd-sdk/core/internal/misc'
+import {assert} from '@sqd-sdk/core/internal/misc'
 import {createLogger} from '@sqd-sdk/core/logger'
-import {type BlockRef, createTransformer, ReadOptions, stream} from '@sqd-sdk/core/pipeline'
+import {type BlockRef, createTransformer, stream} from '@sqd-sdk/core/pipeline'
 import {PortalClient} from '@sqd-sdk/core/portal'
-import {SolanaDataRequestRange, solanaPortalDataSource} from '@sqd-sdk/solana-stream'
+import {solanaPortalDataSource} from '@sqd-sdk/solana-stream'
 import {createTypeormTarget} from '@sqd-sdk/typeorm-store/lib/database'
 import * as tokenProgram from './abi/token-program'
 import * as whirlpool from './abi/whirlpool'
@@ -77,7 +77,22 @@ async function main() {
                         for await (const message of writeOpts.read({
                             cursor: readOpts.cursor ? {number: readOpts.cursor.number, hash: ''} : undefined,
                         })) {
-                            yield message
+                            switch (message.type) {
+                                case 'batch':
+                                    yield {
+                                        type: 'batch',
+                                        cursor: message.cursor,
+                                        head: message.head,
+                                        finalizedHead: message.finalizedHead,
+                                        data: message.data.map((d) => ({
+                                            cursor: d.cursor,
+                                            value: d.value,
+                                        })),
+                                    }
+                                    break
+                                default:
+                                    yield message
+                            }
                         }
                     },
                 }
