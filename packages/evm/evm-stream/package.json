@@ -1,7 +1,7 @@
 {
-    "name": "@sqd-sdk/solana-stream",
+    "name": "@sqd-sdk/evm-stream",
     "version": "0.0.0",
-    "description": "SVM block data streamer",
+    "description": "EVM block data streamer",
     "license": "GPL-3.0-or-later",
     "repository": "git@github.com:subsquid/squid.git",
     "publishConfig": {

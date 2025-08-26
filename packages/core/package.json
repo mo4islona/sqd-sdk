@@ -60,6 +60,16 @@
                 "default": "./lib/portal/query/solana.js"
             }
         },
+        "./portal/evm": {
+            "import": {
+                "types": "./lib/portal/query/evm.d.mts",
+                "default": "./lib/portal/query/evm.mjs"
+            },
+            "require": {
+                "types": "./lib/portal/query/evm.d.ts",
+                "default": "./lib/portal/query/evm.js"
+            }
+        },
         "./pipeline": {
             "import": {
                 "types": "./lib/pipeline/index.d.mts",
