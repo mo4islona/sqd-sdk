@@ -69,7 +69,7 @@ export function createTarget<TCursor, TValue, TRequest, TReturn>(
             )(opts)
         }
 
-        return targetOrFactory as DataTarget<TCursor, TValue, TRequest, TReturn>
+        return targetOrFactory
     }
 }
 
@@ -123,7 +123,7 @@ export function stream<TCursor, TValue, TRequest>(
 function pipe<TCursor, TValue, TRequest, TReturn>(
     source: DataSource<TCursor, TValue, TRequest>,
     target: DataTarget<TCursor, TValue, TRequest, TReturn>,
-    opts: PipeOptions | unknown,
+    opts: PipeOptions,
 ): TReturn {
     if (source.unfinalized && !target.unfinalized) {
         throw new TypeError('Cannot pipe from unfinalized DataSource to finalized DataTarget')
@@ -145,39 +145,39 @@ function pipe<TCursor, TValue, TRequest, TReturn>(
                             throw new TypeError('Finalized source data must have a finalized head')
                         }
 
-                        if ((opts as PipeOptions).validateBatches) {
+                        if (opts.validateBatches) {
                             if (offset && !source.cursorUtils.compare(batch.cursor, offset).isGreaterOrEqual) {
-                                throw new Error('New offset is below the previous offset')
+                                throw new RangeError('New offset is below the previous offset')
                             }
 
                             if (!source.cursorUtils.compare(batch.head, batch.cursor).isGreaterOrEqual) {
-                                throw new Error('Head is below the offset')
+                                throw new RangeError('Head is below the offset')
                             }
 
                             if (!source.unfinalized) {
                                 if (!source.cursorUtils.compare(batch.head, batch.finalizedHead as TCursor).isEqual) {
-                                    throw new Error('Head is not equal to the finalized head')
+                                    throw new RangeError('Head is not equal to the finalized head')
                                 }
                             } else if (batch.finalizedHead) {
                                 if (!source.cursorUtils.compare(batch.head, batch.finalizedHead).isGreaterOrEqual) {
-                                    throw new Error('Head is below the finalized head')
+                                    throw new RangeError('Head is below the finalized head')
                                 }
                             }
 
                             let lastId = offset
                             for (const item of batch.data) {
                                 if (lastId && !source.cursorUtils.compare(item.cursor, lastId).isGreater) {
-                                    throw new Error('Item is below or equal to the previous item')
+                                    throw new RangeError('Item is below or equal to the previous item')
                                 }
                                 lastId = item.cursor
                             }
 
                             if (lastId && !source.cursorUtils.compare(batch.cursor, lastId).isGreaterOrEqual) {
-                                throw new Error('Offset is below the data')
+                                throw new RangeError('Offset is below the data')
                             }
 
                             if (lastId && !source.cursorUtils.compare(batch.head, lastId).isGreaterOrEqual) {
-                                throw new Error('Head is below the data')
+                                throw new RangeError('Head is below the data')
                             }
                         }
 
@@ -187,10 +187,10 @@ function pipe<TCursor, TValue, TRequest, TReturn>(
                     }
                     case 'fork': {
                         if (!source.unfinalized) {
-                            throw new TypeError('Got fork message from finalized DataSource')
+                            throw new RangeError('Got fork message from finalized DataSource')
                         }
                         if (!target.unfinalized) {
-                            throw new TypeError('Got fork message for finalized DataTarget')
+                            throw new RangeError('Got fork message for finalized DataTarget')
                         }
 
                         return

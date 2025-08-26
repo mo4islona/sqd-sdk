@@ -74,7 +74,9 @@ async function main() {
                     unfinalized: opts.unfinalized,
                     cursorUtils: opts.cursorUtils,
                     transform: async function* (writeOpts, readOpts) {
-                        for await (const message of writeOpts.read(readOpts)) {
+                        for await (const message of writeOpts.read({
+                            cursor: readOpts.cursor ? {number: readOpts.cursor.number, hash: ''} : undefined,
+                        })) {
                             yield message
                         }
                     },
