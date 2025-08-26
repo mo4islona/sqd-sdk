@@ -28,11 +28,11 @@ export interface DataTransformerConfig<
 
 export function createTransformer<
     TInputCursor,
-    TOutputCursor = TInputCursor,
-    TInputValue = unknown,
-    TOutputValue = TInputValue,
-    TInputRequest = never,
-    TOutputRequest = TInputRequest,
+    TOutputCursor,
+    TInputValue,
+    TOutputValue,
+    TInputRequest,
+    TOutputRequest,
 >(
     transform: DataTransform<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInputRequest, TOutputRequest>,
 ): (
@@ -40,11 +40,11 @@ export function createTransformer<
 ) => DataDuplex<TInputCursor, TInputValue, TInputRequest, TOutputCursor, TOutputValue, TOutputRequest>
 export function createTransformer<
     TInputCursor,
-    TOutputCursor = TInputCursor,
-    TInputValue = unknown,
-    TOutputValue = TInputValue,
-    TInputRequest = never,
-    TOutputRequest = TInputRequest,
+    TOutputCursor,
+    TInputValue,
+    TOutputValue,
+    TInputRequest,
+    TOutputRequest,
 >(
     config: DataTransformerConfig<
         TInputCursor,
@@ -57,11 +57,11 @@ export function createTransformer<
 ): DataDuplex<TInputCursor, TInputValue, TInputRequest, TOutputCursor, TOutputValue, TOutputRequest>
 export function createTransformer<
     TInputCursor,
-    TOutputCursor = TInputCursor,
-    TInputValue = unknown,
-    TOutputValue = TInputValue,
-    TInputRequest = never,
-    TOutputRequest = TInputRequest,
+    TOutputCursor,
+    TInputValue,
+    TOutputValue,
+    TInputRequest,
+    TOutputRequest,
 >(
     transformOrConfig:
         | DataTransform<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInputRequest, TOutputRequest>

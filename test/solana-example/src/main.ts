@@ -1,13 +1,7 @@
 import {HttpClient} from '@sqd-sdk/core/http-client'
 import {assert} from '@sqd-sdk/core/internal/misc'
 import {createLogger} from '@sqd-sdk/core/logger'
-import {
-    type BlockRef,
-    createTransformer,
-    createStream,
-    type DataReadOptions,
-    createTracker,
-} from '@sqd-sdk/core/pipeline'
+import {createStream, createTracker, createMapper} from '@sqd-sdk/core/pipeline'
 import {PortalClient} from '@sqd-sdk/core/portal'
 import {solanaPortalDataSource} from '@sqd-sdk/solana-stream'
 import {createTypeormTarget} from '@sqd-sdk/typeorm-store/lib/database'
@@ -75,29 +69,12 @@ async function main() {
     )
         //.pipe(createFinalizer())
         .pipe(
-            createTransformer((writeOpts) => ({
-                cursorUtils: writeOpts.cursorUtils,
-                read: async function* (readOpts) {
-                    for await (const message of writeOpts.read(readOpts)) {
-                        switch (message.type) {
-                            case 'batch':
-                                yield {
-                                    type: 'batch',
-                                    cursor: message.cursor,
-                                    head: message.head,
-                                    finalizedHead: message.finalizedHead,
-                                    data: message.data.map((d) => ({
-                                        cursor: d.cursor,
-                                        value: d.value,
-                                    })),
-                                }
-                                break
-                            default:
-                                yield message
-                        }
-                    }
-                },
-            })),
+            createMapper((block) => {
+                return {
+                    ...block,
+                    mapped: true,
+                }
+            }),
         )
         .pipe(createProgressTracker('solana'))
         .pipe(
@@ -153,7 +130,7 @@ async function main() {
 }
 
 function createProgressTracker<
-    TCursor extends {number: number},
+    TCursor extends {number: number; hash: string},
     TValue extends {header: {timestamp: number}},
     TRequest,
 >(prefix: string) {
