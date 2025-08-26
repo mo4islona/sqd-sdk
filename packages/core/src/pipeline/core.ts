@@ -58,24 +58,30 @@ export function createSource<TCursor, TValue, TRequest>(
 }
 
 export function createTarget<TCursor, TValue, TRequest, TReturn>(
+    target: DataTarget<TCursor, TValue, TRequest, TReturn>,
+): DataTarget<TCursor, TValue, TRequest, TReturn>
+export function createTarget<TCursor, TValue, TRequest, TReturn>(
+    factory: (opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TRequest, TReturn>,
+): (opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TRequest, TReturn>
+export function createTarget<TCursor, TValue, TRequest, TReturn>(
     targetOrFactory:
         | DataTarget<TCursor, TValue, TRequest, TReturn>
         | ((opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TRequest, TReturn>),
-): (opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TRequest, TReturn> {
-    return (opts: DataTargetFactoryOptions) => {
-        if (typeof targetOrFactory === 'function') {
-            return (
-                targetOrFactory as (opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TRequest, TReturn>
-            )(opts)
-        }
-
+):
+    | DataTarget<TCursor, TValue, TRequest, TReturn>
+    | ((opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TRequest, TReturn>) {
+    if (typeof targetOrFactory === 'function') {
         return targetOrFactory
     }
+
+    return targetOrFactory
 }
 
 export interface Stream<TCursor, TValue, TRequest> {
     pipe<TReturn>(
-        targetFactory: (opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TRequest, TReturn>,
+        targetOrFactory:
+            | DataTarget<TCursor, TValue, TRequest, TReturn>
+            | ((opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TRequest, TReturn>),
         opts?: PipeOptions,
     ): TReturn
 
@@ -86,9 +92,12 @@ export function stream<TCursor, TValue, TRequest>(
     sourceFactory: () => DataSource<TCursor, TValue, TRequest>,
 ): Stream<TCursor, TValue, TRequest> {
     return {
-        pipe: (targetFactory, opts: PipeOptions = {}) => {
+        pipe: (targetOrFactory, opts: PipeOptions = {}) => {
             const source = sourceFactory()
-            const target = targetFactory({unfinalized: source.unfinalized})
+            const target =
+                typeof targetOrFactory === 'function'
+                    ? targetOrFactory({unfinalized: source.unfinalized})
+                    : targetOrFactory
 
             return pipe(source, target, opts)
         },

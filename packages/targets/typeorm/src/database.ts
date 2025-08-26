@@ -304,39 +304,37 @@ export function createTypeormTarget<TValue>(
     databaseOpts: TypeormDatabaseOptions,
     handler: (store: Store, batch: TValue[]) => Promise<void>,
 ) {
-    return createTarget<HashAndHeight, TValue, never, Promise<void>>(() => {
-        return {
-            unfinalized: true,
-            write: async ({cursorUtils, read}) => {
-                let db = new TypeormDatabase(databaseOpts)
+    return createTarget<HashAndHeight, TValue, never, Promise<void>>({
+        unfinalized: true,
+        write: async ({cursorUtils, read}) => {
+            let db = new TypeormDatabase(databaseOpts)
 
-                const cursor = await db.connect()
+            const cursor = await db.connect()
 
-                async function process(cursor: HashAndHeight | undefined) {
-                    for await (const message of read({cursor})) {
-                        switch (message.type) {
-                            case 'batch': {
-                                await db.transact(message, (store, sliceBeg, sliceEnd) =>
-                                    handler(
-                                        store,
-                                        message.data.slice(sliceBeg, sliceEnd).map((d) => d.value),
-                                    ),
-                                )
-                                break
-                            }
-                            case 'fork': {
-                                const cursor = await db.fork(message)
-                                return process(cursor)
-                            }
+            async function process(cursor: HashAndHeight | undefined) {
+                for await (const message of read({cursor})) {
+                    switch (message.type) {
+                        case 'batch': {
+                            await db.transact(message, (store, sliceBeg, sliceEnd) =>
+                                handler(
+                                    store,
+                                    message.data.slice(sliceBeg, sliceEnd).map((d) => d.value),
+                                ),
+                            )
+                            break
+                        }
+                        case 'fork': {
+                            const cursor = await db.fork(message)
+                            return process(cursor)
                         }
                     }
                 }
+            }
 
-                await process(cursor)
+            await process(cursor)
 
-                await db.disconnect()
-            },
-        }
+            await db.disconnect()
+        },
     })
 }
 

@@ -58,7 +58,7 @@ function createFullyFinalizedBatch<TCursor, TValue>({
     return {
         buffer: [],
         batch: {
-            type: 'batch' as const,
+            type: 'batch',
             finalizedHead: batch.finalizedHead,
             head: batch.finalizedHead!,
             cursor: batch.cursor,
@@ -159,56 +159,49 @@ function handleFork<TCursor, TValue>({
 }
 
 export function createFinalizer<TCursor, TValue, TRequest>() {
-    return createTarget<TCursor, TValue, TRequest, Stream<TCursor, TValue, TRequest>>(
-        (opts: DataTargetFactoryOptions) => {
-            return {
-                unfinalized: true,
-                write: (writeOptions) => {
-                    return stream(() =>
-                        createSource({
-                            unfinalized: false,
-                            cursorUtils: writeOptions.cursorUtils,
-                            read: async function* (readOptions) {
-                                let finalizedCursor: TCursor | undefined
-                                let buffer: DataBatchItem<TCursor, TValue>[] = []
+    return createTarget<TCursor, TValue, TRequest, Stream<TCursor, TValue, TRequest>>({
+        unfinalized: true,
+        write: (writeOptions) => {
+            return stream(() =>
+                createSource({
+                    unfinalized: false,
+                    cursorUtils: writeOptions.cursorUtils,
+                    read: async function* (readOptions) {
+                        let finalizedCursor: TCursor | undefined
+                        let buffer: DataBatchItem<TCursor, TValue>[] = []
 
-                                for await (const message of writeOptions.read(readOptions)) {
-                                    switch (message.type) {
-                                        case 'batch': {
-                                            const result = handleBatch({
-                                                batch: message,
-                                                buffer,
-                                                cursorUtils: writeOptions.cursorUtils,
-                                                finalizedId: finalizedCursor,
-                                            })
-                                            buffer = result.buffer
-                                            finalizedCursor = result.batch?.cursor
+                        for await (const message of writeOptions.read(readOptions)) {
+                            switch (message.type) {
+                                case 'batch': {
+                                    const result = handleBatch({
+                                        batch: message,
+                                        buffer,
+                                        cursorUtils: writeOptions.cursorUtils,
+                                        finalizedId: finalizedCursor,
+                                    })
+                                    buffer = result.buffer
+                                    finalizedCursor = result.batch?.cursor
 
-                                            if (result.batch) {
-                                                yield {
-                                                    ...result.batch,
-                                                    type: 'batch' as const,
-                                                }
-                                            }
-                                            break
-                                        }
-                                        case 'fork': {
-                                            const result = handleFork({
-                                                fork: message,
-                                                buffer,
-                                                finalizedId: finalizedCursor,
-                                                cursorUtils: writeOptions.cursorUtils,
-                                            })
-                                            buffer = result.buffer
-                                            break
-                                        }
+                                    if (result.batch) {
+                                        yield result.batch
                                     }
+                                    break
                                 }
-                            },
-                        }),
-                    )
-                },
-            }
+                                case 'fork': {
+                                    const result = handleFork({
+                                        fork: message,
+                                        buffer,
+                                        finalizedId: finalizedCursor,
+                                        cursorUtils: writeOptions.cursorUtils,
+                                    })
+                                    buffer = result.buffer
+                                    break
+                                }
+                            }
+                        }
+                    },
+                }),
+            )
         },
-    )
+    })
 }

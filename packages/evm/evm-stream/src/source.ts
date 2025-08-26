@@ -1,5 +1,5 @@
 import {applyRangeBound, mergeRangeRequests, type Range} from '@sqd-sdk/core/internal/range/index'
-import type {DataMessage, DataSource} from '@sqd-sdk/core/pipeline'
+import type {DataMessage, ReadOptions} from '@sqd-sdk/core/pipeline'
 import {createBlock, type Block, type FieldSelection} from './objects'
 import {mergeDataRequests, type EvmDataRequestRange} from './query'
 import {type PortalClient, type PortalClientOptions, portalDataSource} from '@sqd-sdk/core/portal'
@@ -71,10 +71,10 @@ export function evmPortalDataSource<F extends FieldSelection>(options: EvmPortal
         }
     }
 
-    return createSource<BlockRef, Block<F>, EvmDataRequestRange[]>({
+    return createSource({
         unfinalized: true,
         cursorUtils: BlockRefUtils,
-        read: (opts) => createBlockStream(opts.cursor, opts.request),
+        read: (opts: ReadOptions<BlockRef, EvmDataRequestRange[]>) => createBlockStream(opts.cursor, opts.request),
     })
 }
 
