@@ -1,5 +1,5 @@
 export * from './errors'
-export * from './data'
+export * from './cursor'
 export * from './core'
 export * from './tools'
 export * from './block'

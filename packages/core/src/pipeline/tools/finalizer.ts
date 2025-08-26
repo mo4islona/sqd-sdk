@@ -1,11 +1,19 @@
-import type {Data, DataBatch, DataFork, DataCursorUtils} from '../data'
-import type {DataDuplexFactory, DataStream} from '../core'
-import {createSource, createTarget, stream} from '../core'
+import type {DataCursorUtils} from '../cursor'
+import {
+    createSource,
+    createTarget,
+    stream,
+    type DataTargetFactoryOptions,
+    type DataBatchMessage,
+    type DataBatchItem,
+    type DataForkMessage,
+    type Stream,
+} from '../core'
 import {maybeLast} from '../../internal/misc'
 
-interface BatchProcessingResult<TData extends Data> {
-    buffer: TData[]
-    batch?: DataBatch<TData, false>
+interface BatchProcessingResult<TCursor, TValue> {
+    buffer: DataBatchItem<TCursor, TValue>[]
+    batch?: DataBatchMessage<TCursor, TValue>
 }
 
 function findRollbackIndex<TId>(currentChain: TId[], forkChain: TId[], cursorUtils: DataCursorUtils<TId>): number {
@@ -40,63 +48,65 @@ function findRollbackIndex<TId>(currentChain: TId[], forkChain: TId[], cursorUti
     return lastCommonIndex
 }
 
-function createFullyFinalizedBatch<TData extends Data>({
+function createFullyFinalizedBatch<TCursor, TValue>({
     batch,
     data,
 }: {
-    batch: DataBatch<TData>
-    data: TData[]
-}): BatchProcessingResult<TData> {
+    batch: DataBatchMessage<TCursor, TValue>
+    data: DataBatchItem<TCursor, TValue>[]
+}): BatchProcessingResult<TCursor, TValue> {
     return {
         buffer: [],
         batch: {
+            type: 'batch' as const,
             finalizedHead: batch.finalizedHead,
-            head: batch.finalizedHead,
+            head: batch.finalizedHead!,
             cursor: batch.cursor,
             data,
         },
     }
 }
 
-function createPartialBatch<TData extends Data>({
+function createPartialBatch<TCursor, TValue>({
     batch,
     data,
     finalizedId,
     cursorUtils,
 }: {
-    batch: DataBatch<TData>
-    data: TData[]
-    finalizedId: TData['cursor']
-    cursorUtils: DataCursorUtils<TData['cursor']>
-}): BatchProcessingResult<TData> {
+    batch: DataBatchMessage<TCursor, TValue>
+    data: DataBatchItem<TCursor, TValue>[]
+    finalizedId: TCursor
+    cursorUtils: DataCursorUtils<TCursor>
+}): BatchProcessingResult<TCursor, TValue> {
     const finalizeIndex = data.findIndex((item) => cursorUtils.compare(item.cursor, finalizedId).isGreater)
     const finalizedData = data.slice(0, finalizeIndex)
 
     return {
         buffer: data.slice(finalizeIndex),
         batch: {
+            type: 'batch' as const,
             finalizedHead: batch.finalizedHead,
-            head: batch.finalizedHead,
+            head: batch.finalizedHead!,
             cursor: maybeLast(finalizedData)?.cursor ?? finalizedId,
             data: finalizedData,
         },
     }
 }
 
-function handleBatch<TData extends Data>({
+function handleBatch<TCursor, TValue>({
     batch,
     buffer,
     cursorUtils,
     finalizedId,
 }: {
-    batch: DataBatch<TData>
-    buffer: TData[]
-    cursorUtils: DataCursorUtils<TData['cursor']>
-    finalizedId: TData['cursor'] | undefined
-}): BatchProcessingResult<TData> {
+    batch: DataBatchMessage<TCursor, TValue>
+    buffer: DataBatchItem<TCursor, TValue>[]
+    cursorUtils: DataCursorUtils<TCursor>
+    finalizedId: TCursor | undefined
+}): BatchProcessingResult<TCursor, TValue> {
     const mergedData = buffer.length > 0 ? [...buffer, ...batch.data] : batch.data
     const unfinalizedIndex = mergedData.findIndex(
-        (item) => cursorUtils.compare(item.cursor, batch.finalizedHead).isGreater,
+        (item) => cursorUtils.compare(item.cursor, batch.finalizedHead!).isGreater,
     )
 
     if (unfinalizedIndex < 0) {
@@ -121,18 +131,18 @@ function handleBatch<TData extends Data>({
     })
 }
 
-function handleFork<TData extends Data>({
+function handleFork<TCursor, TValue>({
     fork,
     buffer,
     finalizedId,
     cursorUtils,
 }: {
-    fork: DataFork<TData['cursor']>
-    buffer: TData[]
-    finalizedId: TData['cursor'] | undefined
-    cursorUtils: DataCursorUtils<TData['cursor']>
+    fork: DataForkMessage<TCursor>
+    buffer: DataBatchItem<TCursor, TValue>[]
+    finalizedId: TCursor | undefined
+    cursorUtils: DataCursorUtils<TCursor>
 }): {
-    buffer: TData[]
+    buffer: DataBatchItem<TCursor, TValue>[]
 } {
     const unfinalizedChain = buffer.map((item) => item.cursor)
     const currentChain = finalizedId ? [finalizedId, ...unfinalizedChain] : unfinalizedChain
@@ -148,60 +158,57 @@ function handleFork<TData extends Data>({
     }
 }
 
-export function createFinalizer<TData extends Data, TRequest>(): DataDuplexFactory<
-    TData,
-    TData,
-    true,
-    false,
-    TRequest,
-    TRequest
-> {
-    return createTarget<TData, true, TRequest, DataStream<TData, false, TRequest>>({
-        unfinalized: true,
-        write: (writeOptions) => {
-            return stream(
-                createSource({
-                    unfinalized: false,
-                    cursorUtils: writeOptions.cursorUtils,
-                    read: async function* (readOptions) {
-                        let finalizedCursor: TData['cursor'] | undefined
-                        let buffer: TData[] = []
+export function createFinalizer<TCursor, TValue, TRequest>() {
+    return createTarget<TCursor, TValue, TRequest, Stream<TCursor, TValue, TRequest>>(
+        (opts: DataTargetFactoryOptions) => {
+            return {
+                unfinalized: true,
+                write: (writeOptions) => {
+                    return stream(() =>
+                        createSource({
+                            unfinalized: false,
+                            cursorUtils: writeOptions.cursorUtils,
+                            read: async function* (readOptions) {
+                                let finalizedCursor: TCursor | undefined
+                                let buffer: DataBatchItem<TCursor, TValue>[] = []
 
-                        for await (const message of writeOptions.read(readOptions)) {
-                            switch (message.type) {
-                                case 'batch': {
-                                    const result = handleBatch({
-                                        batch: message,
-                                        buffer,
-                                        cursorUtils: writeOptions.cursorUtils,
-                                        finalizedId: finalizedCursor,
-                                    })
-                                    buffer = result.buffer
-                                    finalizedCursor = result.batch?.cursor
+                                for await (const message of writeOptions.read(readOptions)) {
+                                    switch (message.type) {
+                                        case 'batch': {
+                                            const result = handleBatch({
+                                                batch: message,
+                                                buffer,
+                                                cursorUtils: writeOptions.cursorUtils,
+                                                finalizedId: finalizedCursor,
+                                            })
+                                            buffer = result.buffer
+                                            finalizedCursor = result.batch?.cursor
 
-                                    if (result.batch) {
-                                        yield {
-                                            ...result.batch,
-                                            type: 'batch',
+                                            if (result.batch) {
+                                                yield {
+                                                    ...result.batch,
+                                                    type: 'batch' as const,
+                                                }
+                                            }
+                                            break
+                                        }
+                                        case 'fork': {
+                                            const result = handleFork({
+                                                fork: message,
+                                                buffer,
+                                                finalizedId: finalizedCursor,
+                                                cursorUtils: writeOptions.cursorUtils,
+                                            })
+                                            buffer = result.buffer
+                                            break
                                         }
                                     }
-                                    break
                                 }
-                                case 'fork': {
-                                    const result = handleFork({
-                                        fork: message,
-                                        buffer,
-                                        finalizedId: finalizedCursor,
-                                        cursorUtils: writeOptions.cursorUtils,
-                                    })
-                                    buffer = result.buffer
-                                    break
-                                }
-                            }
-                        }
-                    },
-                }),
-            )
+                            },
+                        }),
+                    )
+                },
+            }
         },
-    })
+    )
 }

@@ -1,9 +1,9 @@
 import {HttpClient} from '@sqd-sdk/core/http-client'
 import {assert, maybeLast} from '@sqd-sdk/core/internal/misc'
 import {createLogger} from '@sqd-sdk/core/logger'
-import {type BlockDuplexFactory, createBlockTransformer, createTransformer, stream} from '@sqd-sdk/core/pipeline'
+import {type BlockRef, createTransformer, ReadOptions, stream} from '@sqd-sdk/core/pipeline'
 import {PortalClient} from '@sqd-sdk/core/portal'
-import {solanaPortalDataSource} from '@sqd-sdk/solana-stream'
+import {SolanaDataRequestRange, solanaPortalDataSource} from '@sqd-sdk/solana-stream'
 import {createTypeormTarget} from '@sqd-sdk/typeorm-store/lib/database'
 import * as tokenProgram from './abi/token-program'
 import * as whirlpool from './abi/whirlpool'
@@ -24,7 +24,7 @@ async function main() {
 
     console.log(`processing range: [${fromBlock}, ${toBlock ?? null}]`)
 
-    await stream(
+    await stream(() =>
         solanaPortalDataSource({
             portal,
             fields: {
@@ -68,6 +68,19 @@ async function main() {
         }),
     )
         //.pipe(createFinalizer())
+        .pipe(
+            createTransformer((opts) => {
+                return {
+                    unfinalized: opts.unfinalized,
+                    cursorUtils: opts.cursorUtils,
+                    transform: async function* (writeOpts, readOpts) {
+                        for await (const message of writeOpts.read(readOpts)) {
+                            yield message
+                        }
+                    },
+                }
+            }),
+        )
         .pipe(createProgressTracker('solana'))
         .pipe(
             createTypeormTarget({}, async (store, batch) => {
@@ -121,14 +134,13 @@ async function main() {
     console.log('end')
 }
 
-function createProgressTracker<T extends {header: {timestamp: number}}, TUnfinalized extends boolean, TRequest>(
-    prefix: string,
-): BlockDuplexFactory<T, T, TUnfinalized, TUnfinalized, TRequest, TRequest> {
+function createProgressTracker<T extends {header: {timestamp: number}}, TRequest>(prefix: string) {
     const logger = createLogger(`sqd:${prefix}`)
 
-    return createBlockTransformer((opts) => {
+    return createTransformer<BlockRef, BlockRef, T, T, TRequest, TRequest>((opts) => {
         return {
             unfinalized: opts.unfinalized,
+            cursorUtils: opts.cursorUtils,
             transform: async function* (writeOpts, readOpts) {
                 if (readOpts.cursor) {
                     logger.info(`continue from ${readOpts.cursor.number}`)

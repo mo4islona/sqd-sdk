@@ -7,7 +7,7 @@ import {createOrmConfig} from '@subsquid/typeorm-config'
 import {ChangeTracker, rollbackBlock} from './utils/hot'
 import type {DatabaseState, HashAndHeight} from './interfaces'
 import {def} from '@sqd-sdk/core/internal/def'
-import {createTarget, type DataFork, type Data, type DataBatch, createBlockTarget} from '@sqd-sdk/core/pipeline'
+import {createTarget, type DataBatchMessage, type DataForkMessage} from '@sqd-sdk/core/pipeline'
 
 export type IsolationLevel = 'SERIALIZABLE' | 'READ COMMITTED' | 'REPEATABLE READ'
 
@@ -127,7 +127,7 @@ export class TypeormDatabase {
     }
 
     transact(
-        batch: DataBatch<Data<unknown, HashAndHeight>>,
+        batch: DataBatchMessage<HashAndHeight, unknown>,
         cb: (store: Store, sliceBeg: number, sliceEnd: number) => Promise<void>,
     ): Promise<HashAndHeight> {
         return this.submit(async (em) => {
@@ -170,7 +170,7 @@ export class TypeormDatabase {
         })
     }
 
-    fork(fork: DataFork<HashAndHeight>): Promise<HashAndHeight> {
+    fork(fork: DataForkMessage<HashAndHeight>): Promise<HashAndHeight> {
         return this.submit(async (em) => {
             let state = await this.getState(em)
             let chain = [state, ...state.top]
@@ -304,7 +304,7 @@ export function createTypeormTarget<TValue>(
     databaseOpts: TypeormDatabaseOptions,
     handler: (store: Store, batch: TValue[]) => Promise<void>,
 ) {
-    return createBlockTarget<TValue, true, never, Promise<void>>(() => {
+    return createTarget<HashAndHeight, TValue, never, Promise<void>>(() => {
         return {
             unfinalized: true,
             write: async ({cursorUtils, read}) => {
@@ -316,11 +316,10 @@ export function createTypeormTarget<TValue>(
                     for await (const message of read({cursor})) {
                         switch (message.type) {
                             case 'batch': {
-                                const batch = message
-                                await db.transact(batch, (store, sliceBeg, sliceEnd) =>
+                                await db.transact(message, (store, sliceBeg, sliceEnd) =>
                                     handler(
                                         store,
-                                        batch.data.slice(sliceBeg, sliceEnd).map((d) => d.value),
+                                        message.data.slice(sliceBeg, sliceEnd).map((d) => d.value),
                                     ),
                                 )
                                 break

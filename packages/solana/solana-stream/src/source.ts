@@ -1,9 +1,8 @@
 import {applyRangeBound, mergeRangeRequests, type Range} from '@sqd-sdk/core/internal/range/index'
-import type {BlockSourceFactory, BlockMessage} from '@sqd-sdk/core/pipeline'
+import {BlockRefUtils, createSource, type ReadOptions, type BlockRef, type DataMessage} from '@sqd-sdk/core/pipeline'
 import {createBlock, type Block, type FieldSelection, type RequiredFieldSelection} from './objects'
 import {mergeDataRequests, type SolanaDataRequestRange} from './query'
 import {type PortalClient, type PortalClientOptions, portalDataSource} from '@sqd-sdk/core/portal'
-import {createBlockSource, type BlockRef} from '@sqd-sdk/core/pipeline'
 import type * as solana from '@sqd-sdk/core/portal/solana'
 
 export interface SolanaPortalDataReaderOptions<F extends FieldSelection> {
@@ -13,9 +12,7 @@ export interface SolanaPortalDataReaderOptions<F extends FieldSelection> {
     range?: Range
 }
 
-export function solanaPortalDataSource<F extends FieldSelection>(
-    options: SolanaPortalDataReaderOptions<F>,
-): BlockSourceFactory<Block<F>, true, SolanaDataRequestRange[]> {
+export function solanaPortalDataSource<F extends FieldSelection>(options: SolanaPortalDataReaderOptions<F>) {
     let requests = mergeRangeRequests(options.request, mergeDataRequests)
     if (options.range) {
         requests = applyRangeBound(requests, options.range)
@@ -24,7 +21,7 @@ export function solanaPortalDataSource<F extends FieldSelection>(
     const createBlockStream = async function* (
         cursor?: BlockRef,
         request?: SolanaDataRequestRange[],
-    ): AsyncIterableIterator<BlockMessage<Block<F>, true>> {
+    ): AsyncIterableIterator<DataMessage<BlockRef, Block<F>>> {
         const requestsBounded = cursor
             ? applyRangeBound(request ? mergeRangeRequests([...requests, ...request], mergeDataRequests) : requests, {
                   from: cursor.number + 1,
@@ -43,7 +40,7 @@ export function solanaPortalDataSource<F extends FieldSelection>(
                     fields,
                     ...request.request,
                 },
-            })()
+            })
 
             for await (const message of portalSource.read({cursor})) {
                 switch (message.type) {
@@ -73,9 +70,10 @@ export function solanaPortalDataSource<F extends FieldSelection>(
         }
     }
 
-    return createBlockSource({
+    return createSource({
         unfinalized: true,
-        read: (opts) => createBlockStream(opts.cursor, opts.request),
+        cursorUtils: BlockRefUtils,
+        read: (opts: ReadOptions<BlockRef, SolanaDataRequestRange[]>) => createBlockStream(opts.cursor, opts.request),
     })
 }
 

@@ -1,8 +1,8 @@
 import {last} from '../internal/misc'
 import {Throttler} from '../internal/throttler'
-import type {DataSourceFactory, DataMessage, BlockSourceFactory, BlockMessage} from '../pipeline'
-import {type BlockData, BlockRefUtils, createBlockSource} from '../pipeline/block'
-import {PortalClient, type BlockRef, type PortalClientOptions, isForkException} from './client'
+import {type DataMessage, createSource} from '../pipeline'
+import {BlockRefUtils} from '../pipeline/block'
+import {type BlockRef, PortalClient, type PortalClientOptions, isForkException} from './client'
 import type {GetBlock, Query} from './query'
 
 export interface PortalDataSourceOptions<TQuery extends Query> {
@@ -17,15 +17,13 @@ function calculateHead(portalHead: BlockRef, lastBlock: BlockRef | undefined): B
 
 export type PortalData<TQuery extends Query> = GetBlock<TQuery>
 
-export function portalDataSource<TQuery extends Query>(
-    options: PortalDataSourceOptions<TQuery>,
-): BlockSourceFactory<PortalData<TQuery>, true, never> {
+export function portalDataSource<TQuery extends Query>(options: PortalDataSourceOptions<TQuery>) {
     const portal = options.portal instanceof PortalClient ? options.portal : new PortalClient(options.portal)
     const headThrottler = new Throttler(async () => portal.getHead(), 5_000)
 
     const createBlockStream = async function* (
         offset?: BlockRef,
-    ): AsyncIterableIterator<BlockMessage<PortalData<TQuery>, true>> {
+    ): AsyncIterable<DataMessage<BlockRef, PortalData<TQuery>>> {
         let parentBlockHash: string | undefined
         let fromBlock = options.query.fromBlock ?? 0
         if (offset) {
@@ -74,8 +72,9 @@ export function portalDataSource<TQuery extends Query>(
         }
     }
 
-    return createBlockSource({
+    return createSource({
         unfinalized: true,
+        cursorUtils: BlockRefUtils,
         read: (opts) => createBlockStream(opts.cursor),
     })
 }

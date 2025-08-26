@@ -1,12 +1,11 @@
 import {assert} from '../internal/misc'
-import type {Data, DataFork} from './data'
 
-export class ForkException<TId> extends Error {
+export class ForkException<TCursor> extends Error {
     readonly isSqdForkException = true
 
-    constructor(readonly fork: DataFork<TId>) {
-        assert(fork.cursors.length > 0)
-        const lastCursor = fork.cursors[fork.cursors.length - 1]
+    constructor(readonly cursors: TCursor[]) {
+        assert(cursors.length > 0)
+        const lastCursor = cursors[cursors.length - 1]
         super(`Fork exception at ${lastCursor}`)
     }
 
@@ -15,5 +14,5 @@ export class ForkException<TId> extends Error {
     }
 }
 
-export const isForkException = <TId>(err: unknown): err is ForkException<TId> =>
-    err instanceof Error && !!(err as Partial<ForkException<TId>>).isSqdForkException
+export const isForkException = <TCursor>(err: unknown): err is ForkException<TCursor> =>
+    err instanceof Error && !!(err as Partial<ForkException<TCursor>>).isSqdForkException

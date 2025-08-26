@@ -1,8 +1,6 @@
 import type {Simplify} from '@sqd-sdk/core/internal/types/misc'
 import type {Trues, Select, Selector} from '@sqd-sdk/core/internal/selection'
 import type {Hex, Base58} from '@sqd-sdk/core/internal/types/primitive'
-import type {BlockRef} from '@sqd-sdk/core/portal'
-import type {Data} from '@sqd-sdk/core/pipeline'
 
 type Id = {id: string}
 

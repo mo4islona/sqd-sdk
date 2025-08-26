@@ -45,21 +45,3 @@ export namespace DataCursor {
     export const Equal = new CompareResult(Compare.Equal)
     export const Fork = new CompareResult(Compare.Fork)
 }
-
-export type Data<TValue = unknown, TId = unknown> = {
-    value: TValue
-    cursor: TId
-}
-
-export type DataCursor<TData extends Data> = TData['cursor']
-
-export interface DataBatch<TData extends Data, TUnfinalized extends boolean = boolean> {
-    readonly data: TData[]
-    readonly finalizedHead: TUnfinalized extends false ? DataCursor<TData> : DataCursor<TData> | undefined
-    readonly head: DataCursor<TData>
-    readonly cursor: DataCursor<TData>
-}
-
-export interface DataFork<TCursor> {
-    readonly cursors: TCursor[]
-}
