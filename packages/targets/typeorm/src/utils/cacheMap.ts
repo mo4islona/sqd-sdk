@@ -12,7 +12,7 @@ export class CacheMap {
     private logger?: Logger
 
     constructor(logger?: Logger) {
-        this.logger = logger?.child('cache')
+        this.logger = logger
     }
 
     get(metadata: EntityMetadata, id: string) {

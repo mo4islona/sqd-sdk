@@ -91,11 +91,11 @@ export class Store {
     constructor({em, changes, logger, state, ...opts}: StoreOptions) {
         this.em = em
         this.changes = changes
-        this.logger = logger?.child('store')
+        this.logger = logger
         this.state = state
         this.postponeWriteOperations = opts.postponeWriteOperations
         this.cacheEntities = opts.cacheEntities
-        this.defers = new DeferList(this.logger?.child('defer'))
+        this.defers = new DeferList(this.logger)
         this.pendingSync = new Mutex()
         this.pendingLoad = new Mutex()
     }

@@ -10,7 +10,29 @@ export interface LogRecord {
 
 export type Sink = (rec: LogRecord) => void
 
-export class Logger {
+export interface Logger {
+    isLevelEnabled(level: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | (string & {})): boolean
+    trace(msg?: string): void
+    trace(attributes?: object, msg?: string): void
+    trace(attributes?: any, msg?: any): void
+    debug(msg?: string): void
+    debug(attributes?: object, msg?: string): void
+    debug(attributes?: any, msg?: any): void
+    info(msg?: string): void
+    info(attributes?: object, msg?: string): void
+    info(attributes?: any, msg?: any): void
+    warn(msg?: string): void
+    warn(attributes?: object, msg?: string): void
+    warn(attributes?: any, msg?: any): void
+    error(msg?: string): void
+    error(attributes?: object, msg?: string): void
+    error(attributes?: any, msg?: any): void
+    fatal(msg?: string): void
+    fatal(attributes?: object, msg?: string): void
+    fatal(attributes?: any, msg?: any): void
+}
+
+export class SqdLogger implements Logger {
     constructor(
         private sink: Sink,
         private ns: string,
@@ -21,9 +43,9 @@ export class Logger {
         return LEVELS.get(this.ns)
     }
 
-    child(attributes: object): Logger
-    child(ns: string, attributes?: object): Logger
-    child(nsOrAttributes: string | object, attributes?: object): Logger {
+    child(attributes: object): SqdLogger
+    child(ns: string, attributes?: object): SqdLogger
+    child(nsOrAttributes: string | object, attributes?: object): SqdLogger {
         let ns = this.ns
         if (typeof nsOrAttributes === 'string') {
             ns = ns ? `${ns}:${nsOrAttributes}` : nsOrAttributes
@@ -37,7 +59,7 @@ export class Logger {
                 attributes = this.attributes
             }
         }
-        return new Logger(this.sink, ns, attributes)
+        return new SqdLogger(this.sink, ns, attributes)
     }
 
     write(level: LogLevel, msg?: string): void
@@ -53,6 +75,10 @@ export class Logger {
             attributes = {err: attributes}
         } else if (attributes instanceof Map || attributes instanceof Set) {
             // attributes = attributes
+        }
+        if (msg == null && 'msg' in attributes) {
+            msg = attributes.msg
+            delete attributes.msg
         }
         let rec: any = {
             level,
@@ -99,6 +125,25 @@ export class Logger {
     fatal(attributes?: object | null, msg?: string): void
     fatal(attributes?: any, msg?: any): void {
         this.write(LogLevel.FATAL, attributes, msg)
+    }
+
+    isLevelEnabled(level: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'): boolean {
+        switch (level) {
+            case 'trace':
+                return this.isTrace()
+            case 'debug':
+                return this.isDebug()
+            case 'info':
+                return this.isInfo()
+            case 'warn':
+                return this.isWarn()
+            case 'error':
+                return this.isError()
+            case 'fatal':
+                return this.isFatal()
+            default:
+                return false
+        }
     }
 
     isTrace(): boolean {

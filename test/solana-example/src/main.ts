@@ -1,7 +1,13 @@
 import {HttpClient} from '@sqd-sdk/core/http-client'
 import {assert} from '@sqd-sdk/core/internal/misc'
 import {createLogger} from '@sqd-sdk/core/logger'
-import {type BlockRef, createTransformer, createStream, type DataReadOptions} from '@sqd-sdk/core/pipeline'
+import {
+    type BlockRef,
+    createTransformer,
+    createStream,
+    type DataReadOptions,
+    createTracker,
+} from '@sqd-sdk/core/pipeline'
 import {PortalClient} from '@sqd-sdk/core/portal'
 import {solanaPortalDataSource} from '@sqd-sdk/solana-stream'
 import {createTypeormTarget} from '@sqd-sdk/typeorm-store/lib/database'
@@ -146,40 +152,95 @@ async function main() {
     console.log('end')
 }
 
-function createProgressTracker<T extends {header: {timestamp: number}}, TRequest>(prefix: string) {
+function createProgressTracker<
+    TCursor extends {number: number},
+    TValue extends {header: {timestamp: number}},
+    TRequest,
+>(prefix: string) {
     const logger = createLogger(`sqd:${prefix}`)
+    const readTimer = createTimer()
+    const writeTimer = createTimer()
 
-    return createTransformer<BlockRef, BlockRef, T, T, TRequest, TRequest>((writeOpts) => ({
-        cursorUtils: writeOpts.cursorUtils,
-        read: async function* (readOpts) {
-            if (readOpts.cursor) {
-                logger.info(`continue from ${readOpts.cursor.number}`)
-            }
+    let stats:
+        | {
+              cursor: TCursor
+              head: TCursor | undefined
+              finalizedHead: TCursor | undefined
+              lastBlockTime: number | undefined
+              avgReadTime: number | undefined
+              lastReadTime: number | undefined
+              avgWriteTime: number | undefined
+              lastWriteTime: number | undefined
+          }
+        | undefined = undefined
 
-            for await (const message of writeOpts.read(readOpts)) {
-                switch (message.type) {
-                    case 'batch':
-                        if (message.data.length > 0) {
-                            const {cursor, head, finalizedHead, data} = message
-                            logger.info(
-                                [
-                                    `progress: ${cursor.number} / ${head.number} (${finalizedHead?.number ?? 0})`,
-                                    `blocks: ${message.data.length}, lag: ${(
-                                        (Date.now() - data[data.length - 1].value.header.timestamp * 1000) / 1000
-                                    ).toFixed(2)}s`,
-                                ].join(', '),
-                            )
-                        }
-                        break
-                    case 'fork':
-                        logger.info(`fork: ${message.cursors[message.cursors.length - 1].number}`)
-                        break
+    return createTracker<TCursor, TValue, TRequest>({
+        beforeRead: (cursor) => {
+            if (!stats && cursor) {
+                logger.info(`continue from ${cursor.number}`)
+                stats = {
+                    cursor,
+                    head: undefined,
+                    finalizedHead: undefined,
+                    lastBlockTime: undefined,
+                    avgReadTime: undefined,
+                    avgWriteTime: undefined,
+                    lastReadTime: undefined,
+                    lastWriteTime: undefined,
                 }
-
-                yield message
             }
+            readTimer.start()
         },
-    }))
+        afterRead: () => {
+            if (!stats) return
+
+            const elapsed = readTimer.stop()
+
+            stats.avgReadTime = stats.avgReadTime == null ? elapsed : (stats.avgReadTime + elapsed) / 2
+            stats.lastReadTime = elapsed
+        },
+        beforeWrite: () => {
+            writeTimer.start()
+        },
+        afterWrite: (message) => {
+            if (!stats) return
+
+            const elapsed = writeTimer.stop()
+            stats.avgWriteTime = stats.avgWriteTime == null ? elapsed : (stats.avgWriteTime + elapsed) / 2
+            stats.lastWriteTime = elapsed
+            stats.lastBlockTime = message.data[message.data.length - 1].value.header.timestamp * 1000
+            stats.head = message.cursor
+            stats.finalizedHead = message.finalizedHead
+            stats.cursor = message.cursor
+
+            logger.info(
+                {
+                    lag: `${(Date.now() - (stats.lastBlockTime ?? 0) / 1000).toFixed(2)}s`,
+                    avgReadTime: `${(stats.avgReadTime ?? 0 / 1000).toFixed(2)}s`,
+                    lastReadTime: `${(stats.lastReadTime ?? 0 / 1000).toFixed(2)}s`,
+                    avgWriteTime: `${(stats.avgWriteTime ?? 0 / 1000).toFixed(2)}s`,
+                    lastWriteTime: `${(stats.lastWriteTime ?? 0 / 1000).toFixed(2)}s`,
+                },
+                `progress: ${stats.cursor.number} / ${stats.head.number} (${stats.finalizedHead?.number ?? 0})`,
+            )
+        },
+    })
+}
+
+function createTimer() {
+    let start: number | undefined = undefined
+
+    return {
+        start: () => {
+            start = Date.now()
+        },
+        stop: () => {
+            if (start == null) return 0
+            let elapsed = Date.now() - start
+            start = undefined
+            return elapsed
+        },
+    }
 }
 
 function formatId(block: {number: number; hash: string}, ...address: number[]): string {

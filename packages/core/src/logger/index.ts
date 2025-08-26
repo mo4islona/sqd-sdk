@@ -1,4 +1,4 @@
-import {Logger} from './logger'
+import {SqdLogger, type Logger} from './logger'
 import {jsonLinesStderrSink} from './sinks/json'
 import {prettyStderrSink} from './sinks/pretty'
 
@@ -12,8 +12,8 @@ const prettyEnabled = process.env.FORCE_PRETTY_LOGGER
     : // @ts-ignore
       process.stderr.isTTY
 
-const ROOT = new Logger(prettyEnabled ? prettyStderrSink : jsonLinesStderrSink, '')
+const ROOT = new SqdLogger(prettyEnabled ? prettyStderrSink : jsonLinesStderrSink, '')
 
-export function createLogger(ns: string, attributes?: object): Logger {
+export function createLogger(ns: string, attributes?: object): SqdLogger {
     return ROOT.child(ns, attributes)
 }

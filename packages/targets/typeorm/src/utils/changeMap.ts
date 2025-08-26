@@ -17,7 +17,7 @@ export class ChangeMap {
     private logger: Logger
 
     constructor(private opts: {logger: Logger}) {
-        this.logger = this.opts.logger.child('changes')
+        this.logger = this.opts.logger
     }
 
     get(metadata: EntityMetadata, id: string): ChangeType | undefined {

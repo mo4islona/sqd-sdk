@@ -119,22 +119,22 @@ export class HttpClient implements BaseHttpClient {
     }
 
     protected beforeRequest(req: FetchRequest): void {
-        if (this.log?.isDebug()) {
-            this.log.debug(
-                {
-                    httpRequestId: req.id,
-                    httpRequestUrl: req.url,
-                    httpRequestMethod: req.method,
-                    httpRequestHeaders: Array.from(req.headers),
-                    httpRequestBody: req.body,
-                },
+        if (this.log?.isLevelEnabled('debug')) {
+        this.log.debug(
+            {
+                httpRequestId: req.id,
+                httpRequestUrl: req.url,
+                httpRequestMethod: req.method,
+                httpRequestHeaders: Array.from(req.headers),
+                httpRequestBody: req.body,
+            },
                 'http request',
             )
         }
     }
 
     protected beforeRetryPause(req: FetchRequest, reason: Error | HttpResponse, pause: number): void {
-        if (this.log?.isWarn()) {
+        if (this.log?.isLevelEnabled('warn')) {
             let info: any = {
                 httpRequestId: req.id,
                 httpRequestUrl: req.url,
@@ -155,7 +155,7 @@ export class HttpClient implements BaseHttpClient {
     }
 
     protected afterResponseHeaders(req: FetchRequest, url: string, status: number, headers: Headers): void {
-        if (this.log?.isDebug()) {
+        if (this.log?.isLevelEnabled('debug')) {
             this.log.debug(
                 {
                     httpRequestId: req.id,
@@ -169,7 +169,7 @@ export class HttpClient implements BaseHttpClient {
     }
 
     protected afterResponse(req: FetchRequest, res: HttpResponse): void {
-        if (!res.stream && this.log?.isDebug()) {
+        if (!res.stream && this.log?.isLevelEnabled('debug')) {
             let httpResponseBody: any = res.body
             if (typeof res.body === 'string' || res.body instanceof Uint8Array) {
                 if (res.body.length > 1024 * 1024) {
