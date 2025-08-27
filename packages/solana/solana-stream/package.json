@@ -1,6 +1,6 @@
 {
     "name": "@belopash/solana-stream",
-    "version": "0.0.0",
+    "version": "0.0.2",
     "description": "SVM block data streamer",
     "license": "GPL-3.0-or-later",
     "repository": "git@github.com:subsquid/squid.git",
@@ -14,13 +14,11 @@
     "scripts": {
         "build": "tsx scripts/build.ts",
         "build:types": "tsc",
-        "pack": "(cd lib && npm pack --pack-destination ..) && rm -f package.tgz && mv sqd-sdk-solana-stream-*.tgz package.tgz",
-        "prepublishOnly": "pnpm build && pnpm pack",
-        "publish": "npm publish package.tgz",
-        "postpublish": "rm -f package.tgz"
+        "pack": "(cd dist && npm pack --pack-destination ..) && rm -f package.tgz && mv *.tgz package.tgz",
+        "publish": "npm publish package.tgz"
     },
     "dependencies": {
-        "@belopash/core": "link:../../core/dist",
+        "@belopash/core": "^0.0.1",
         "bs58": "^6.0.0"
     },
     "devDependencies": {

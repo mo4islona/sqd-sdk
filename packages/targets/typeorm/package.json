@@ -1,11 +1,16 @@
 {
     "name": "@belopash/typeorm-target",
-    "version": "0.0.0",
+    "version": "0.0.2",
     "description": "Optimized TypeORM based storage for SQD SDK",
     "type": "module",
     "main": "./index.js",
+    "publishConfig": {
+        "access": "public"
+    },
     "scripts": {
-        "build": "tsx scripts/build.ts"
+        "build": "tsx scripts/build.ts",
+        "pack": "(cd dist && npm pack --pack-destination ..) && rm -f package.tgz && mv *.tgz package.tgz",
+        "publish": "npm publish package.tgz"
     },
     "dependencies": {
         "@belopash/core": "link:../../core/dist",

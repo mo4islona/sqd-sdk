@@ -106,6 +106,7 @@ export class TypeormDatabase {
             `SELECT number, hash, nonce FROM ${schema}.status WHERE id = 0`,
         )
         if (status.length === 0) {
+            await em.query(`INSERT INTO ${schema}.status (id, number, hash, nonce) VALUES (0, -1, '0x', 0)`)
             return undefined
         }
 

@@ -89,7 +89,7 @@ importers:
   packages/solana/solana-stream:
     dependencies:
       '@belopash/core':
-        specifier: link:../../core/dist
+        specifier: workspace:../../core/dist
         version: link:../../core/dist
       bs58:
         specifier: ^6.0.0

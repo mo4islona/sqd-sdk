@@ -1,6 +1,6 @@
 {
     "name": "@belopash/evm-stream",
-    "version": "0.0.0",
+    "version": "0.0.3",
     "description": "EVM block data streamer",
     "license": "GPL-3.0-or-later",
     "repository": "git@github.com:subsquid/squid.git",
@@ -8,9 +8,13 @@
         "access": "public"
     },
     "type": "module",
-    "main": "./index.js",
+    "main": "./index.cjs",
+    "module": "./index.js",
+    "types": "./index.d.ts",
     "scripts": {
-        "build": "tsx scripts/build.ts"
+        "build": "tsx scripts/build.ts",
+        "pack": "(cd dist && npm pack --pack-destination ..) && rm -f package.tgz && mv *.tgz package.tgz",
+        "publish": "npm publish package.tgz"
     },
     "dependencies": {
         "@belopash/core": "link:../../core/dist",

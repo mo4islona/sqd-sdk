@@ -11,10 +11,8 @@
     "types": "./index.d.ts",
     "scripts": {
         "build": "tsx scripts/build.ts",
-        "pack": "(cd lib && npm pack --pack-destination ..) && rm -f package.tgz && mv sqd-sdk-core-*.tgz package.tgz",
-        "prepublishOnly": "pnpm build && pnpm pack",
-        "publish": "npm publish package.tgz",
-        "postpublish": "rm -f package.tgz"
+        "pack": "(cd dist && npm pack --pack-destination ..) && rm -f package.tgz && mv *.tgz package.tgz",
+        "publish": "npm publish package.tgz"
     },
     "dependencies": {
         "supports-color": "^8.1.1"
