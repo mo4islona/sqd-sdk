@@ -4,7 +4,6 @@ import {ForkException} from './errors'
 
 /**
  * Represents a single data item with its associated cursor position.
- * Used to track the position of each value in the data stream.
  *
  * @template TCursor - The cursor type that represents a position in the data stream (e.g. block number + hash)
  * @template TValue - The actual data value
@@ -43,7 +42,7 @@ export interface DataBatchMessage<TCursor, TValue> {
  */
 export interface DataForkMessage<TCursor> {
     type: 'fork'
-    /** Array of valid cursor positions within the updated data */
+    /** Array of cursor positions valid within the post-forkdata */
     cursors: TCursor[]
 }
 
