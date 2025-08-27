@@ -1,5 +1,5 @@
 import {type Codec, type GetCodecType, Src} from '@subsquid/borsh'
-import {getInstructionData} from '@sqd-sdk/solana-stream'
+import {getInstructionData} from '@belopash/solana-stream'
 import assert from 'node:assert'
 
 export type Bytes = string

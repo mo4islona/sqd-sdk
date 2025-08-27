@@ -1,6 +1,6 @@
-import {bisect, maybeLast} from '@sqd-sdk/core/internal/misc'
+import {bisect, maybeLast} from '@belopash/core/internal/misc'
 import type * as base from './types'
-import type * as solana from '@sqd-sdk/core/portal/solana'
+import type * as solana from '@belopash/core/portal/solana'
 import {BlockHeader, Instruction, Transaction, LogMessage, Balance, Reward, TokenBalance} from './entities'
 
 export function createBlock<F extends base.FieldSelection>(

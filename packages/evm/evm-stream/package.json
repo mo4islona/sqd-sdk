@@ -1,5 +1,5 @@
 {
-    "name": "@sqd-sdk/evm-stream",
+    "name": "@belopash/evm-stream",
     "version": "0.0.0",
     "description": "EVM block data streamer",
     "license": "GPL-3.0-or-later",
@@ -13,7 +13,7 @@
         "build": "tsx scripts/build.ts"
     },
     "dependencies": {
-        "@sqd-sdk/core": "link:../../core/dist",
+        "@belopash/core": "link:../../core/dist",
         "bs58": "^6.0.0"
     },
     "devDependencies": {

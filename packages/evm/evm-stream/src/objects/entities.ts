@@ -1,5 +1,5 @@
-import type {Hex} from '@sqd-sdk/core/internal/types/primitive'
-import type * as EVM from '@sqd-sdk/core/portal/evm'
+import type {Hex} from '@belopash/core/internal/types/primitive'
+import type * as EVM from '@belopash/core/portal/evm'
 import type * as base from './types'
 
 export class Block<F extends base.FieldSelection> {

@@ -1,10 +1,10 @@
-import {applyRangeBound, mergeRangeRequests, type Range} from '@sqd-sdk/core/internal/range'
-import type {DataMessage, DataReadOptions} from '@sqd-sdk/core/pipeline'
+import {applyRangeBound, mergeRangeRequests, type Range} from '@belopash/core/internal/range'
+import type {DataMessage, DataReadOptions} from '@belopash/core/pipeline'
 import {createBlock, type Block, type FieldSelection} from './objects'
 import {mergeDataRequests, type EvmDataRequestRange} from './query'
-import {type PortalClient, type PortalClientOptions, portalDataSource} from '@sqd-sdk/core/portal'
-import {BlockRefUtils, createSource, type BlockRef} from '@sqd-sdk/core/pipeline'
-import type * as EVM from '@sqd-sdk/core/portal/evm'
+import {type PortalClient, type PortalClientOptions, portalDataSource} from '@belopash/core/portal'
+import {BlockRefUtils, createSource, type BlockRef} from '@belopash/core/pipeline'
+import type * as EVM from '@belopash/core/portal/evm'
 
 export interface EvmPortalDataReaderOptions<F extends FieldSelection> {
     portal: PortalClientOptions | PortalClient

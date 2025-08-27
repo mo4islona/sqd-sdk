@@ -13,10 +13,10 @@ import {
     option,
     STRING,
     withDefault,
-} from '@sqd-sdk/core/validation'
+} from '@belopash/core/validation'
 import type {FieldSelection} from './objects'
-import {weakMemo} from '@sqd-sdk/core/internal/misc'
-import type {Selector} from '@sqd-sdk/core/internal/selection'
+import {weakMemo} from '@belopash/core/internal/misc'
+import type {Selector} from '@belopash/core/internal/selection'
 
 export function project<T>(fields: Selector<keyof T> | undefined, obj: T): Partial<T> {
     if (fields == null) return {}

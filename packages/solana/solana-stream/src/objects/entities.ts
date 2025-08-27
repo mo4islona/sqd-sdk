@@ -1,6 +1,6 @@
-import type {Base58, Hex} from '@sqd-sdk/core/internal/types/primitive'
+import type {Base58, Hex} from '@belopash/core/internal/types/primitive'
 import {getInstructionDescriptor} from '../instruction'
-import type * as solana from '@sqd-sdk/core/portal/solana'
+import type * as solana from '@belopash/core/portal/solana'
 import type * as base from './types'
 
 export class BlockHeader<F extends base.FieldSelection> {

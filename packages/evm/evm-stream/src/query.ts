@@ -1,5 +1,5 @@
-import type * as EVM from '@sqd-sdk/core/portal/evm'
-import {applyRangeBound, mergeRangeRequests, type Range, type RangeRequest} from '@sqd-sdk/core/internal/range'
+import type * as EVM from '@belopash/core/portal/evm'
+import {applyRangeBound, mergeRangeRequests, type Range, type RangeRequest} from '@belopash/core/internal/range'
 
 // TODO: is it needed?
 export type {
@@ -8,7 +8,7 @@ export type {
     TraceRequest,
     StateDiffRequest,
     LogRequest,
-} from '@sqd-sdk/core/portal/evm'
+} from '@belopash/core/portal/evm'
 
 export type RequestOptions<R> = {range?: Range; request: R}
 export type LogRequestOptions = RequestOptions<EVM.LogRequest>

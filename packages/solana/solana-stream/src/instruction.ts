@@ -1,5 +1,5 @@
-import type {Hex} from '@sqd-sdk/core/internal/types/primitive'
-import {toHex} from '@sqd-sdk/core/internal/hex'
+import type {Hex} from '@belopash/core/internal/types/primitive'
+import {toHex} from '@belopash/core/internal/hex'
 import bs58 from 'bs58'
 
 // FIXME: there is a bug with bs58

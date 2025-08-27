@@ -1,7 +1,7 @@
-import type {Simplify} from '@sqd-sdk/core/internal/types/misc'
-import type {Trues, Select, Selector} from '@sqd-sdk/core/internal/selection'
-import type {Hex} from '@sqd-sdk/core/internal/types/primitive'
-import type * as EVM from '@sqd-sdk/core/portal/evm'
+import type {Simplify} from '@belopash/core/internal/types/misc'
+import type {Trues, Select, Selector} from '@belopash/core/internal/selection'
+import type {Hex} from '@belopash/core/internal/types/primitive'
+import type * as EVM from '@belopash/core/portal/evm'
 
 type Id = {id: string}
 

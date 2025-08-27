@@ -1,5 +1,5 @@
-const { PortalClient } = require('@sqd-sdk/core/portal-client')
-const { HttpClient } = require('@sqd-sdk/core/http-client')
+const { PortalClient } = require('@belopash/core/portal-client')
+const { HttpClient } = require('@belopash/core/http-client')
 
 const portal = new PortalClient({
     url: 'https://portal.sqd.dev/datasets/solana-beta',

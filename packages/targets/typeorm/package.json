@@ -1,5 +1,5 @@
 {
-    "name": "@sqd-sdk/typeorm-store",
+    "name": "@belopash/typeorm-target",
     "version": "0.0.0",
     "description": "Optimized TypeORM based storage for SQD SDK",
     "type": "module",
@@ -8,7 +8,7 @@
         "build": "tsx scripts/build.ts"
     },
     "dependencies": {
-        "@sqd-sdk/core": "link:../../core/dist",
+        "@belopash/core": "link:../../core/dist",
         "fast-copy": "^3.0.2"
     },
     "peerDependencies": {

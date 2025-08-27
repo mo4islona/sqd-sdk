@@ -1,6 +1,6 @@
 import type {EntityMetadata, FindOptionsRelations, ObjectLiteral} from 'typeorm'
 import {mergeRelations} from './misc'
-import type {Logger} from '@sqd-sdk/core/logger'
+import type {Logger} from '@belopash/core/logger'
 
 export type DeferData = {
     ids: Set<string>

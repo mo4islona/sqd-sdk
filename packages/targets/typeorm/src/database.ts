@@ -1,13 +1,13 @@
-import {createLogger, type Logger} from '@sqd-sdk/core/logger'
-import {assert, assertNotNull, maybeLast} from '@sqd-sdk/core/internal/misc'
+import {createLogger, type Logger} from '@belopash/core/logger'
+import {assert, assertNotNull, maybeLast} from '@belopash/core/internal/misc'
 import {DataSource, type EntityManager} from 'typeorm'
 import {Store} from './store'
 import {StateManager} from './utils/stateManager'
 import {createOrmConfig} from '@subsquid/typeorm-config'
 import {ChangeTracker, rollbackBlock} from './utils/hot'
 import type {DatabaseState, HashAndHeight} from './interfaces'
-import {def} from '@sqd-sdk/core/internal/def'
-import {createTarget, type DataBatchMessage, type DataForkMessage} from '@sqd-sdk/core/pipeline'
+import {def} from '@belopash/core/internal/def'
+import {createTarget, type DataBatchMessage, type DataForkMessage} from '@belopash/core/pipeline'
 
 export type IsolationLevel = 'SERIALIZABLE' | 'READ COMMITTED' | 'REPEATABLE READ'
 

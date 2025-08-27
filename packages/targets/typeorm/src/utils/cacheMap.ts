@@ -1,6 +1,6 @@
 import type {EntityMetadata} from 'typeorm'
 import type {EntityLiteral} from './misc'
-import type {Logger} from '@sqd-sdk/core/logger'
+import type {Logger} from '@belopash/core/logger'
 import fastCopy from 'fast-copy'
 
 // FIXME: there is a bug with fast-copy

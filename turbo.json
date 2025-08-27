@@ -8,7 +8,7 @@
             "persistent": true,
             "cache": false
         },
-        "@sqd-sdk/core#build": {
+        "@belopash/core#build": {
             "inputs": [
                 "src/**/*.ts",
                 "package.json",
@@ -24,8 +24,8 @@
             "outputs": ["dist/**", "dist-dts/**"],
             "outputLogs": "new-only"
         },
-        "@sqd-sdk/solana-stream#build": {
-            "dependsOn": ["@sqd-sdk/core#build"],
+        "@belopash/solana-stream#build": {
+            "dependsOn": ["@belopash/core#build"],
             "inputs": [
                 "src/**/*.ts",
                 "package.json",
@@ -41,8 +41,8 @@
             "outputs": ["dist/**", "dist-dts/**"],
             "outputLogs": "new-only"
         },
-        "@sqd-sdk/evm-stream#build": {
-            "dependsOn": ["@sqd-sdk/core#build"],
+        "@belopash/evm-stream#build": {
+            "dependsOn": ["@belopash/core#build"],
             "inputs": [
                 "src/**/*.ts",
                 "package.json",
@@ -58,8 +58,8 @@
             "outputs": ["dist/**", "dist-dts/**"],
             "outputLogs": "new-only"
         },
-        "@sqd-sdk/typeorm-store#build": {
-            "dependsOn": ["@sqd-sdk/core#build"],
+        "@belopash/typeorm-target#build": {
+            "dependsOn": ["@belopash/core#build"],
             "inputs": [
                 "src/**/*.ts",
                 "package.json",

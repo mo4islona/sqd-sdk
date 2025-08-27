@@ -1,4 +1,4 @@
-import {createFuture, type Future} from '@sqd-sdk/core/internal/async'
+import {createFuture, type Future} from '@belopash/core/internal/async'
 
 export class Mutex {
     private waitQueue: Array<Future<void>> = []

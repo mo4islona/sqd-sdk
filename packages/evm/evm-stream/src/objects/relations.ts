@@ -1,6 +1,6 @@
-import {maybeLast} from '@sqd-sdk/core/internal/misc'
+import {maybeLast} from '@belopash/core/internal/misc'
 import type * as base from './types'
-import type * as EVM from '@sqd-sdk/core/portal/evm'
+import type * as EVM from '@belopash/core/portal/evm'
 import {BlockHeader, Transaction, Log, TraceCreate, TraceCall, TraceSuicide, TraceReward, StateDiff} from './entities'
 
 export function createBlock<F extends base.FieldSelection>(

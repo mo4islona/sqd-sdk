@@ -1,5 +1,5 @@
-import type {Logger} from '@sqd-sdk/core/logger'
-import {unexpectedCase} from '@sqd-sdk/core/internal/misc'
+import type {Logger} from '@belopash/core/logger'
+import {unexpectedCase} from '@belopash/core/internal/misc'
 import assert from 'node:assert'
 import clone from 'fast-copy'
 import type {DataSource, EntityMetadata, EntityTarget, FindOptionsRelations} from 'typeorm'

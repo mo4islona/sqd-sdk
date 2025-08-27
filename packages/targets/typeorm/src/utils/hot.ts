@@ -1,4 +1,4 @@
-import {assertNotNull} from '@sqd-sdk/core/internal/misc'
+import {assertNotNull} from '@belopash/core/internal/misc'
 import type {EntityManager, EntityMetadata, EntityTarget} from 'typeorm'
 import type {ColumnMetadata} from 'typeorm/metadata/ColumnMetadata.js'
 import type {EntityLiteral} from './misc'

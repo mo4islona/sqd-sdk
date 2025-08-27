@@ -8,9 +8,9 @@
     "dependencies": {
         "@aws-sdk/core": "^3.775.0",
         "@clickhouse/client": "^1.11.2",
-        "@sqd-sdk/core": "link:../../packages/core/dist",
-        "@sqd-sdk/solana-stream": "link:../../packages/solana/solana-stream/dist",
-        "@sqd-sdk/typeorm-store": "link:../../packages/targets/typeorm/dist",
+        "@belopash/core": "link:../../packages/core/dist",
+        "@belopash/solana-stream": "link:../../packages/solana/solana-stream/dist",
+        "@belopash/typeorm-target": "link:../../packages/targets/typeorm/dist",
         "@subsquid/borsh": "^0.3.0",
         "@subsquid/typeorm-store": "^1.5.1",
         "dotenv": "^16.4.7"

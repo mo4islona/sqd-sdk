@@ -1,4 +1,4 @@
-import type {Logger} from '@sqd-sdk/core/logger'
+import type {Logger} from '@belopash/core/logger'
 import {
     type EntityManager,
     type EntityMetadata,
@@ -14,7 +14,7 @@ import {DeferList} from './utils/deferList'
 import {type EntityClass, type EntityLiteral, noNull, splitIntoBatches} from './utils/misc'
 import {Mutex} from './utils/mutex'
 import {ChangeType, type StateManager} from './utils/stateManager'
-import {assert} from '@sqd-sdk/core/internal/misc'
+import {assert} from '@belopash/core/internal/misc'
 import type {ChangeTracker} from './utils/hot'
 
 export interface GetOptions<E = any> {

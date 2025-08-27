@@ -1,4 +1,4 @@
-import type {Logger} from '@sqd-sdk/core/logger'
+import type {Logger} from '@belopash/core/logger'
 import type {EntityMetadata} from 'typeorm'
 
 export enum ChangeType {
