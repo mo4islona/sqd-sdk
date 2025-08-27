@@ -81,7 +81,7 @@ export class OneOfValidationFailure extends ValidationFailure {
         super(value, 'given value does not match any of the expected patterns')
     }
 
-    toString(): string {
+    override toString(): string {
         let msg = 'given value does not match any of the expected patterns:'
         for (let i = 0; i < this.patternNames.length; i++) {
             msg += `\n    ${this.patternNames[i]}: ${this.errors[i].toString()}`

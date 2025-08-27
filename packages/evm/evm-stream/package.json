@@ -7,16 +7,20 @@
     "publishConfig": {
         "access": "public"
     },
-    "files": ["lib", "src"],
-    "main": "lib/index.js",
+    "type": "module",
+    "main": "./index.js",
     "scripts": {
-        "build": "rm -rf lib && tsup"
+        "build": "tsx scripts/build.ts"
     },
     "dependencies": {
-        "@sqd-sdk/core": "workspace:^",
+        "@sqd-sdk/core": "link:../../core/dist",
         "bs58": "^6.0.0"
     },
     "devDependencies": {
-        "typescript": "~5.5.4"
+        "typescript": "~5.5.4",
+        "recast": "^0.23.11",
+        "cpy": "^10.1.0",
+        "zx": "^7.2.2",
+        "tsx": "^3.12.7"
     }
 }

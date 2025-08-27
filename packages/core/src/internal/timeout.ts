@@ -49,7 +49,7 @@ export class TimeoutError extends Error {
         super(`timed out after ${ms} ms`)
     }
 
-    get name(): string {
+    override get name(): string {
         return 'TimeoutError'
     }
 }

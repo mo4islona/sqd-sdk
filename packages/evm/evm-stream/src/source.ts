@@ -1,4 +1,4 @@
-import {applyRangeBound, mergeRangeRequests, type Range} from '@sqd-sdk/core/internal/range/index'
+import {applyRangeBound, mergeRangeRequests, type Range} from '@sqd-sdk/core/internal/range'
 import type {DataMessage, DataReadOptions} from '@sqd-sdk/core/pipeline'
 import {createBlock, type Block, type FieldSelection} from './objects'
 import {mergeDataRequests, type EvmDataRequestRange} from './query'

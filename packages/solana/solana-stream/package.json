@@ -7,13 +7,12 @@
     "publishConfig": {
         "access": "public"
     },
-    "files": ["lib", "src"],
-    "main": "./lib/index.cjs",
-    "module": "./lib/index.js",
-    "types": "./lib/index.d.ts",
+    "type": "module",
+    "main": "./index.cjs",
+    "module": "./index.js",
+    "types": "./index.d.ts",
     "scripts": {
-        "build": "tsup && pnpm build:types",
-        "build:dev": "tsup --config tsup.config.dev.ts && pnpm build:types",
+        "build": "tsx scripts/build.ts",
         "build:types": "tsc",
         "pack": "(cd lib && npm pack --pack-destination ..) && rm -f package.tgz && mv sqd-sdk-solana-stream-*.tgz package.tgz",
         "prepublishOnly": "pnpm build && pnpm pack",
@@ -21,10 +20,14 @@
         "postpublish": "rm -f package.tgz"
     },
     "dependencies": {
-        "@sqd-sdk/core": "workspace:../../core/lib",
+        "@sqd-sdk/core": "link:../../core/dist",
         "bs58": "^6.0.0"
     },
     "devDependencies": {
-        "typescript": "~5.5.4"
+        "typescript": "~5.5.4",
+        "recast": "^0.23.11",
+        "cpy": "^10.1.0",
+        "zx": "^7.2.2",
+        "tsx": "^3.12.7"
     }
 }

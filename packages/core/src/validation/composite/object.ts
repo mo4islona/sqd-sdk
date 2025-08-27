@@ -43,6 +43,7 @@ export class ObjectValidator<Props extends Record<string, Validator>>
                 return err
             }
         }
+        return undefined
     }
 
     phantom(): GetPropsSrc<Props> {

@@ -235,24 +235,24 @@ class TraceBase<F extends base.FieldSelection> {
 }
 
 export class TraceCreate<F extends base.FieldSelection> extends TraceBase<F> {
-    type = 'create' as const
+    override type = 'create' as const
     action!: base.TraceCreateActionFields
     result?: base.TraceCreateResultFields
 }
 
 export class TraceCall<F extends base.FieldSelection> extends TraceBase<F> {
-    type = 'call' as const
+    override type = 'call' as const
     action!: base.TraceCallActionFields
     result?: base.TraceCallResultFields
 }
 
 export class TraceSuicide<F extends base.FieldSelection> extends TraceBase<F> {
-    type = 'suicide' as const
+    override type = 'suicide' as const
     action!: base.TraceSuicideActionFields
 }
 
 export class TraceReward<F extends base.FieldSelection> extends TraceBase<F> {
-    type = 'reward' as const
+    override type = 'reward' as const
     action!: base.TraceRewardActionFields
 }
 

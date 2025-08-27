@@ -120,14 +120,14 @@ export class HttpClient implements BaseHttpClient {
 
     protected beforeRequest(req: FetchRequest): void {
         if (this.log?.isLevelEnabled('debug')) {
-        this.log.debug(
-            {
-                httpRequestId: req.id,
-                httpRequestUrl: req.url,
-                httpRequestMethod: req.method,
-                httpRequestHeaders: Array.from(req.headers),
-                httpRequestBody: req.body,
-            },
+            this.log.debug(
+                {
+                    httpRequestId: req.id,
+                    httpRequestUrl: req.url,
+                    httpRequestMethod: req.method,
+                    httpRequestHeaders: Array.from(req.headers),
+                    httpRequestBody: req.body,
+                },
                 'http request',
             )
         }
@@ -393,7 +393,7 @@ export class HttpError extends Error {
         super(`Got ${response.status} from ${response.url}`)
     }
 
-    get name(): string {
+    override get name(): string {
         return 'HttpError'
     }
 }
@@ -403,7 +403,7 @@ export class HttpTimeoutError extends Error {
         super(`request timed out after ${ms} ms`)
     }
 
-    get name(): string {
+    override get name(): string {
         return 'HttpTimeoutError'
     }
 }
@@ -413,7 +413,7 @@ export class HttpBodyTimeoutError extends Error {
         super(`request body timed out after ${ms} ms`)
     }
 
-    get name(): string {
+    override get name(): string {
         return 'HttpBodyTimeoutError'
     }
 }

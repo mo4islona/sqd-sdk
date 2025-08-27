@@ -1,4 +1,4 @@
-import type {Validator} from '../../validation'
+import type {Validator} from '../validation'
 
 /**
  * @example '0x0123456789abcdef'

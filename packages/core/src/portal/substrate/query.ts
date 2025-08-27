@@ -25,7 +25,7 @@ import {
     project,
     type Selected,
     type ObjectValidatorShape,
-} from './common'
+} from '../common'
 
 /**
  * @example 'Balances.Transfer'

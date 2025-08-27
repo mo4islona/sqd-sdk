@@ -13,6 +13,7 @@ export class OptionValidator<T, S> implements Validator<T | undefined, S | undef
 
     validate(value: unknown): ValidationFailure | undefined {
         if (value != null) return this.value.validate(value)
+        return undefined
     }
 
     phantom(): S | undefined | null {

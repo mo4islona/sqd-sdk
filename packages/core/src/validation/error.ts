@@ -29,7 +29,7 @@ export class ValidationFailure {
 }
 
 export class DataValidationError extends Error {
-    get name(): string {
+    override get name(): string {
         return 'DataValidationError'
     }
 }

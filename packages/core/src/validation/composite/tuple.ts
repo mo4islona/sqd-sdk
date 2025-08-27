@@ -8,7 +8,8 @@ export class TupleValidator implements Validator<any[]> {
 
     private getInvalidLengthMessage(): string {
         if (this.invalidLengthMessage) return this.invalidLengthMessage
-        return (this.invalidLengthMessage = `{value} is not a tuple of length ${this.tuple.length}`)
+        this.invalidLengthMessage = `{value} is not a tuple of length ${this.tuple.length}`
+        return this.invalidLengthMessage
     }
 
     cast(value: unknown): ValidationFailure | any[] {
@@ -40,6 +41,7 @@ export class TupleValidator implements Validator<any[]> {
                 return err
             }
         }
+        return undefined
     }
 
     phantom(): any[] {

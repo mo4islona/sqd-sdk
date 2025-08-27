@@ -1,7 +1,10 @@
 import type {EntityMetadata} from 'typeorm'
 import type {EntityLiteral} from './misc'
 import type {Logger} from '@sqd-sdk/core/logger'
-import clone from 'fast-copy'
+import fastCopy from 'fast-copy'
+
+// FIXME: there is a bug with fast-copy
+const clone = typeof fastCopy === 'function' ? fastCopy : (fastCopy as any).default as typeof fastCopy
 
 export class CachedEntity<E extends EntityLiteral = EntityLiteral> {
     constructor(public value: E | null = null) {}
@@ -48,7 +51,7 @@ export class CacheMap {
     add<E extends EntityLiteral>(
         metadata: EntityMetadata,
         entity: E,
-        opts?: {nullify?: boolean; override?: boolean}
+        opts?: {nullify?: boolean; override?: boolean},
     ): void {
         const cacheMap = this.getEntityCache(metadata)
 

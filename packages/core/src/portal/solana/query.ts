@@ -26,7 +26,7 @@ import {
     project,
     type ObjectValidatorShape,
     type Selected,
-} from './common'
+} from '../common'
 
 export type BlockHeaderFields = {
     hash: Base58

@@ -1,4 +1,4 @@
-import {createLogger} from '@sqd-sdk/core/logger'
+import {createLogger, type Logger} from '@sqd-sdk/core/logger'
 import {assert, assertNotNull, maybeLast} from '@sqd-sdk/core/internal/misc'
 import {DataSource, type EntityManager} from 'typeorm'
 import {Store} from './store'
@@ -48,6 +48,8 @@ export class TypeormDatabase {
     }
     protected projectDir: string
 
+    protected logger: Logger
+
     constructor(options?: TypeormDatabaseOptions) {
         this.statusSchema = options?.stateSchema || 'squid_processor'
         this.isolationLevel = options?.isolationLevel || 'SERIALIZABLE'
@@ -55,6 +57,7 @@ export class TypeormDatabase {
         this.cacheEntities = options?.cacheEntities ?? true
         this.resetOnCommit = options?.resetOnCommit ?? true
         this.projectDir = options?.projectDir || process.cwd()
+        this.logger = createLogger('sqd:db')
     }
 
     async connect(): Promise<HashAndHeight | undefined> {
@@ -218,7 +221,7 @@ export class TypeormDatabase {
         let store = new Store({
             em,
             state: this.getStateManager(),
-            logger: this.getLogger().child('store'),
+            logger: this.logger,
             changes: changeWriter,
             postponeWriteOperations: this.postponeWriteOperations,
             cacheEntities: this.cacheEntities,
@@ -259,18 +262,13 @@ export class TypeormDatabase {
         return con.driver.escape(this.statusSchema)
     }
 
-    @def
-    private getLogger() {
-        return createLogger('sqd:db')
-    }
-
     private getStateManager() {
         let connection = assertNotNull(this.con)
         let stateManager = connection[StateManagerSymbol]
         if (stateManager == null) {
             stateManager = new StateManager({
                 connection,
-                logger: this.getLogger().child('state'),
+                logger: this.logger,
             })
             connection[StateManagerSymbol] = stateManager
         }

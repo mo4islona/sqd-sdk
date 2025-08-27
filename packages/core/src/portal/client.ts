@@ -17,7 +17,7 @@ import {
     type solana,
     type substrate,
 } from './query'
-import type {Simplify} from './query/common'
+import type {Simplify} from './common'
 import {cast} from '../validation'
 
 const USER_AGENT = 'sqd-core/portal-client (https://sqd.ai)'
@@ -65,7 +65,7 @@ export interface PortalClientOptions {
 }
 
 export interface PortalRequestOptions {
-    headers?: HeadersInit
+    headers?: Headers | Record<string, string> | Array<[string, string]>
     retryAttempts?: number
     retrySchedule?: number[]
     httpTimeout?: number
@@ -532,15 +532,17 @@ class LineSplitter {
             }
             if (result.length > 0) return result
         }
+        return undefined
     }
 
     end(): string | undefined {
         if (this.line) return this.line
+        return undefined
     }
 }
 
 export class ForkException extends Error {
-    readonly name = 'ForkError'
+    override readonly name = 'ForkError'
 
     constructor(readonly lastBlocks: BlockRef[], readonly head: BlockRef) {
         let parent = last(lastBlocks)

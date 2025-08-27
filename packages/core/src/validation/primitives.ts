@@ -150,6 +150,7 @@ export const STRING_NAT: Validator<number, string> = {
     validate(value: unknown): ValidationFailure | undefined {
         let i = this.cast(value)
         if (i instanceof ValidationFailure) return i
+        return undefined
     },
     phantom(): string {
         return '0'
@@ -170,6 +171,7 @@ export const STRING_FLOAT: Validator<number, string> = {
     validate(value: unknown): ValidationFailure | undefined {
         let i = this.cast(value)
         if (i instanceof ValidationFailure) return i
+        return undefined
     },
     phantom(): string {
         return '0'
@@ -221,6 +223,7 @@ export const SMALL_QTY: Validator<number, Bytes> = {
     validate(value: unknown): ValidationFailure | undefined {
         let i = this.cast(value)
         if (i instanceof ValidationFailure) return i
+        return undefined
     },
     phantom(): string {
         return '0x0'

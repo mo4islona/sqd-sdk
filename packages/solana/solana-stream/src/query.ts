@@ -3,7 +3,7 @@ import {mergeSelection, type MergeSelection} from '@sqd-sdk/core/internal/select
 import {applyRangeBound, mergeRangeRequests, type Range, type RangeRequest} from '@sqd-sdk/core/internal/range'
 
 // TODO: is it needed?
-export {
+export type {
     DataRequest,
     TransactionRequest,
     InstructionRequest,

@@ -23,6 +23,7 @@ common/autoinstallers/*/.npmrc
 
 # Built js libs
 **/*/lib
+**/*/dist*
 **/*/package.tgz
 
 .turbo

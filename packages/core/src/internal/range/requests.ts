@@ -8,6 +8,7 @@ export function getRangeAt<R extends RangeRequest<any>>(ranges: R[], height: num
         let to = req.range.to ?? Number.POSITIVE_INFINITY
         if (from <= height && height <= to) return req
     }
+    return undefined
 }
 
 export function getRequestAt<R>(requests: RangeRequest<R>[], height: number): R | undefined {

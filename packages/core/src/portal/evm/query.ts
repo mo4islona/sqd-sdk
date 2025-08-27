@@ -24,7 +24,7 @@ import {
     project,
     type Selected,
     type ObjectValidatorShape,
-} from './common'
+} from '../common'
 
 type AddPrefix<Prefix extends string, S> = S extends string ? `${Prefix}${Capitalize<S>}` : never
 

@@ -27,6 +27,7 @@ export class ArrayValidator<T, S> implements Validator<T[], S[]> {
                 return err
             }
         }
+        return undefined
     }
 
     phantom(): S[] {

@@ -47,6 +47,7 @@ export class KeyTaggedUnionValidator<U extends Record<string, Validator<any>>>
             err.path.push(tag)
             return err
         }
+        return undefined
     }
 
     phantom(): GetKeyTaggedUnionSrc<U> {
@@ -71,11 +72,13 @@ export class KeyTaggedUnionValidator<U extends Record<string, Validator<any>>>
 
     private getOnlyOneOfMessage(): string {
         if (this.onlyOneOfMessage) return this.onlyOneOfMessage
-        return (this.onlyOneOfMessage = `only one of ${print(Object.keys(this.union))} properties expected to be present in the object, but got {value}`)
+        this.onlyOneOfMessage = `only one of ${print(Object.keys(this.union))} properties expected to be present in the object, but got {value}`
+        return this.onlyOneOfMessage
     }
 
     private getNoPropsMessage(): string {
         if (this.noPropsMessage) return this.noPropsMessage
-        return (this.noPropsMessage = `expected an object with one of ${print(Object.keys(this.union))} properties, but got {value}`)
+        this.noPropsMessage = `expected an object with one of ${print(Object.keys(this.union))} properties, but got {value}`
+        return this.noPropsMessage
     }
 }

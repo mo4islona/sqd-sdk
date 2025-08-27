@@ -1,9 +1,9 @@
-import {applyRangeBound, mergeRangeRequests, type Range} from '@sqd-sdk/core/internal/range/index'
+import {applyRangeBound, mergeRangeRequests, type Range} from '@sqd-sdk/core/internal/range'
 import {BlockRefUtils, createSource, type DataReadOptions, type BlockRef, type DataMessage} from '@sqd-sdk/core/pipeline'
 import {createBlock, type Block, type FieldSelection, type RequiredFieldSelection} from './objects'
 import {mergeDataRequests, type SolanaDataRequestRange} from './query'
 import {type PortalClient, type PortalClientOptions, portalDataSource} from '@sqd-sdk/core/portal'
-import type * as solana from '@sqd-sdk/core/portal/solana'
+import type * as solana from '@sqd-sdk/core/portal/solana/query'
 
 export interface SolanaPortalDataReaderOptions<F extends FieldSelection> {
     portal: PortalClientOptions | PortalClient

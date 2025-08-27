@@ -1,27 +1,79 @@
 {
-  "$schema": "https://turbo.build/schema.json",
-"tasks": {
-    "build": {
-        "dependsOn": ["^build"]
-    },
-    "build:dev": {
-        "dependsOn": ["^build:dev"]
-    },
-    "lint": {
-        "dependsOn": ["^lint"]
-    },
-    "dev": {
-        "persistent": true,
-        "cache": false
-    },
-    "@sqd-sdk/solana-stream#build": {
-        "dependsOn": ["@sqd-sdk/core#build"]
-    },
-    "@sqd-sdk/solana-stream#build:dev": {
-        "dependsOn": ["@sqd-sdk/core#build:dev"]
-    },
-    "solana-example#build": {
-        "dependsOn": ["@sqd-sdk/core#build", "@sqd-sdk/solana-stream#build"]
+    "$schema": "https://turbo.build/schema.json",
+    "tasks": {
+        "lint": {
+            "dependsOn": ["^lint"]
+        },
+        "dev": {
+            "persistent": true,
+            "cache": false
+        },
+        "@sqd-sdk/core#build": {
+            "inputs": [
+                "src/**/*.ts",
+                "package.json",
+                "README.md",
+                "../README.md",
+                "tsconfig.json",
+                "tsconfig.*.json",
+                "tsup.config.ts",
+                "scripts/build.ts",
+                "scripts/fix-imports.ts",
+                "../tsconfig.json"
+            ],
+            "outputs": ["dist/**", "dist-dts/**"],
+            "outputLogs": "new-only"
+        },
+        "@sqd-sdk/solana-stream#build": {
+            "dependsOn": ["@sqd-sdk/core#build"],
+            "inputs": [
+                "src/**/*.ts",
+                "package.json",
+                "README.md",
+                "../README.md",
+                "tsconfig.json",
+                "tsconfig.*.json",
+                "tsup.config.ts",
+                "scripts/build.ts",
+                "scripts/fix-imports.ts",
+                "../tsconfig.json"
+            ],
+            "outputs": ["dist/**", "dist-dts/**"],
+            "outputLogs": "new-only"
+        },
+        "@sqd-sdk/evm-stream#build": {
+            "dependsOn": ["@sqd-sdk/core#build"],
+            "inputs": [
+                "src/**/*.ts",
+                "package.json",
+                "README.md",
+                "../README.md",
+                "tsconfig.json",
+                "tsconfig.*.json",
+                "tsup.config.ts",
+                "scripts/build.ts",
+                "scripts/fix-imports.ts",
+                "../tsconfig.json"
+            ],
+            "outputs": ["dist/**", "dist-dts/**"],
+            "outputLogs": "new-only"
+        },
+        "@sqd-sdk/typeorm-store#build": {
+            "dependsOn": ["@sqd-sdk/core#build"],
+            "inputs": [
+                "src/**/*.ts",
+                "package.json",
+                "README.md",
+                "../README.md",
+                "tsconfig.json",
+                "tsconfig.*.json",
+                "tsup.config.ts",
+                "scripts/build.ts",
+                "scripts/fix-imports.ts",
+                "../tsconfig.json"
+            ],
+            "outputs": ["dist/**", "dist-dts/**"],
+            "outputLogs": "new-only"
+        }
     }
-}
 }

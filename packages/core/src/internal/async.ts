@@ -23,7 +23,7 @@ export class ClosedQueueError extends Error {
         super('Queue was closed, no more puts are allowed!')
     }
 
-    get name(): string {
+    override get name(): string {
         return 'AsyncQueueWasClosed'
     }
 }

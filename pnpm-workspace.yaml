@@ -1,4 +1,6 @@
 packages:
-  - packages/**/
-  - "!packages/**/lib"
+  - packages/core
+  - packages/solana/solana-stream
+  - packages/evm/evm-stream
+  - packages/targets/typeorm
   - test/*

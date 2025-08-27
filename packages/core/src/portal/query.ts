@@ -1,9 +1,9 @@
-import {unexpectedCase} from '../../internal/misc'
+import {unexpectedCase} from '../internal/misc'
 import type {Simplify} from './common'
 import * as evm from './evm'
 import * as solana from './solana'
 import * as substrate from './substrate'
-import type {Validator} from '../../validation'
+import type {Validator} from '../validation'
 
 export type {PortalBlock, PortalQuery} from './common'
 export type {evm, solana, substrate}

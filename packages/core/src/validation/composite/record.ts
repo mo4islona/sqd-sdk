@@ -35,6 +35,7 @@ export class RecordValidator<K extends string, V, S> implements Validator<Record
                 return err
             }
         }
+        return undefined
     }
 
     phantom(): Record<K, S> {
