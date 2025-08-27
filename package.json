@@ -1,6 +1,7 @@
 {
     "name": "sqd-sdk",
     "packageManager": "pnpm@8.6.7",
+    "type": "module",
     "scripts": {
         "build:prod": "turbo run build:prod",
         "build": "turbo run build"
@@ -8,8 +9,14 @@
     "devDependencies": {
         "@babel/parser": "^7.28.3",
         "@biomejs/biome": "^1.9.4",
+        "@rollup/plugin-typescript": "^11.1.6",
+        "cpy": "^10.1.0",
         "glob": "^11.0.3",
-        "tsup": "^8.5.0",
-        "turbo": "^2.3.4"
+        "recast": "^0.23.11",
+        "rollup": "^4.21.1",
+        "tsx": "^3.12.7",
+        "turbo": "^2.3.4",
+        "typescript": "~5.5.4",
+        "zx": "^7.2.2"
     }
 }

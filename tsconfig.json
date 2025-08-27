@@ -35,5 +35,5 @@
         "noErrorTruncation": true /* Disable truncating types in error messages. */,
         "checkJs": true
     },
-    "exclude": ["**/dist"]
+    "exclude": ["**/lib"]
 }

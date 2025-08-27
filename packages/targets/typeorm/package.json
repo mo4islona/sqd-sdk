@@ -3,17 +3,19 @@
     "version": "0.0.2",
     "description": "Optimized TypeORM based storage for SQD SDK",
     "type": "module",
-    "main": "./index.js",
+    "main": "./lib/index.cjs",
+    "module": "./lib/index.js",
+    "types": "./lib/index.d.ts",
     "publishConfig": {
         "access": "public"
     },
     "scripts": {
-        "build": "tsx scripts/build.ts",
-        "pack": "(cd dist && npm pack --pack-destination ..) && rm -f package.tgz && mv *.tgz package.tgz",
+        "build": "tsx ../../../scripts/build-package.ts",
+        "pack": "(cd lib && npm pack --pack-destination ..) && rm -f package.tgz && mv *.tgz package.tgz",
         "publish": "npm publish package.tgz"
     },
     "dependencies": {
-        "@belopash/core": "link:../../core/dist",
+        "@belopash/core": "workspace:^",
         "fast-copy": "^3.0.2"
     },
     "peerDependencies": {
@@ -22,12 +24,148 @@
         "typeorm": "^0.3.20"
     },
     "devDependencies": {
+        "@rollup/plugin-typescript": "^11.1.6",
         "@types/node": "^20.12.7",
         "@types/pg": "^8.11.5",
-        "typescript": "^5.4.5",
-        "recast": "^0.23.11",
         "cpy": "^10.1.0",
-        "zx": "^7.2.2",
-        "tsx": "^3.12.7"
+        "glob": "^11.0.3",
+        "recast": "^0.23.11",
+        "rollup": "^4.21.1",
+        "tslib": "^2.8.1",
+        "tsx": "^3.12.7",
+        "typescript": "^5.4.5",
+        "zx": "^7.2.2"
+    },
+    "exports": {
+        "./database": {
+            "import": {
+                "default": "./lib/database.js",
+                "types": "./lib/database.d.ts"
+            },
+            "require": {
+                "default": "./lib/database.cjs",
+                "types": "./lib/database.d.cts"
+            }
+        },
+        ".": {
+            "import": {
+                "default": "./lib/index.js",
+                "types": "./lib/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/index.cjs",
+                "types": "./lib/index.d.cts"
+            }
+        },
+        "./interfaces": {
+            "import": {
+                "default": "./lib/interfaces.js",
+                "types": "./lib/interfaces.d.ts"
+            },
+            "require": {
+                "default": "./lib/interfaces.cjs",
+                "types": "./lib/interfaces.d.cts"
+            }
+        },
+        "./store": {
+            "import": {
+                "default": "./lib/store.js",
+                "types": "./lib/store.d.ts"
+            },
+            "require": {
+                "default": "./lib/store.cjs",
+                "types": "./lib/store.d.cts"
+            }
+        },
+        "./version": {
+            "import": {
+                "default": "./lib/version.js",
+                "types": "./lib/version.d.ts"
+            },
+            "require": {
+                "default": "./lib/version.cjs",
+                "types": "./lib/version.d.cts"
+            }
+        },
+        "./utils/cacheMap": {
+            "import": {
+                "default": "./lib/utils/cacheMap.js",
+                "types": "./lib/utils/cacheMap.d.ts"
+            },
+            "require": {
+                "default": "./lib/utils/cacheMap.cjs",
+                "types": "./lib/utils/cacheMap.d.cts"
+            }
+        },
+        "./utils/changeMap": {
+            "import": {
+                "default": "./lib/utils/changeMap.js",
+                "types": "./lib/utils/changeMap.d.ts"
+            },
+            "require": {
+                "default": "./lib/utils/changeMap.cjs",
+                "types": "./lib/utils/changeMap.d.cts"
+            }
+        },
+        "./utils/commitOrder": {
+            "import": {
+                "default": "./lib/utils/commitOrder.js",
+                "types": "./lib/utils/commitOrder.d.ts"
+            },
+            "require": {
+                "default": "./lib/utils/commitOrder.cjs",
+                "types": "./lib/utils/commitOrder.d.cts"
+            }
+        },
+        "./utils/deferList": {
+            "import": {
+                "default": "./lib/utils/deferList.js",
+                "types": "./lib/utils/deferList.d.ts"
+            },
+            "require": {
+                "default": "./lib/utils/deferList.cjs",
+                "types": "./lib/utils/deferList.d.cts"
+            }
+        },
+        "./utils/hot": {
+            "import": {
+                "default": "./lib/utils/hot.js",
+                "types": "./lib/utils/hot.d.ts"
+            },
+            "require": {
+                "default": "./lib/utils/hot.cjs",
+                "types": "./lib/utils/hot.d.cts"
+            }
+        },
+        "./utils/misc": {
+            "import": {
+                "default": "./lib/utils/misc.js",
+                "types": "./lib/utils/misc.d.ts"
+            },
+            "require": {
+                "default": "./lib/utils/misc.cjs",
+                "types": "./lib/utils/misc.d.cts"
+            }
+        },
+        "./utils/mutex": {
+            "import": {
+                "default": "./lib/utils/mutex.js",
+                "types": "./lib/utils/mutex.d.ts"
+            },
+            "require": {
+                "default": "./lib/utils/mutex.cjs",
+                "types": "./lib/utils/mutex.d.cts"
+            }
+        },
+        "./utils/stateManager": {
+            "import": {
+                "default": "./lib/utils/stateManager.js",
+                "types": "./lib/utils/stateManager.d.ts"
+            },
+            "require": {
+                "default": "./lib/utils/stateManager.cjs",
+                "types": "./lib/utils/stateManager.d.cts"
+            }
+        }
     }
 }

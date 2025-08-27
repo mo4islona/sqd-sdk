@@ -6,7 +6,6 @@ import {StateManager} from './utils/stateManager'
 import {createOrmConfig} from '@subsquid/typeorm-config'
 import {ChangeTracker, rollbackBlock} from './utils/hot'
 import type {DatabaseState, HashAndHeight} from './interfaces'
-import {def} from '@belopash/core/internal/def'
 import {createTarget, type DataBatchMessage, type DataForkMessage} from '@belopash/core/pipeline'
 
 export type IsolationLevel = 'SERIALIZABLE' | 'READ COMMITTED' | 'REPEATABLE READ'

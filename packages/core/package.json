@@ -6,12 +6,12 @@
         "access": "public"
     },
     "type": "module",
-    "main": "./index.cjs",
-    "module": "./index.js",
-    "types": "./index.d.ts",
+    "main": "./lib/index.cjs",
+    "module": "./lib/index.js",
+    "types": "./lib/index.d.ts",
     "scripts": {
-        "build": "tsx scripts/build.ts",
-        "pack": "(cd dist && npm pack --pack-destination ..) && rm -f package.tgz && mv *.tgz package.tgz",
+        "build": "tsx ../../scripts/build-package.ts",
+        "pack": "(cd lib && npm pack --pack-destination ..) && rm -f package.tgz && mv *.tgz package.tgz",
         "publish": "npm publish package.tgz"
     },
     "dependencies": {
@@ -20,13 +20,699 @@
     "devDependencies": {
         "@types/node": "^18.19.83",
         "@types/supports-color": "^8.1.3",
-        "esbuild-fix-imports-plugin": "^1.0.19",
-        "esbuild-plugin-alias": "^0.2.1",
-        "esbuild-plugin-tsconfig-paths": "^1.0.0",
         "typescript": "~5.5.4",
-        "recast": "^0.23.11",
-        "cpy": "^10.1.0",
-        "zx": "^7.2.2",
-        "tsx": "^3.12.7"
+        "tslib": "^2.8.1"
+    },
+    "exports": {
+        ".": {
+            "import": {
+                "default": "./lib/index.js",
+                "types": "./lib/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/index.cjs",
+                "types": "./lib/index.d.cts"
+            }
+        },
+        "./version": {
+            "import": {
+                "default": "./lib/version.js",
+                "types": "./lib/version.d.ts"
+            },
+            "require": {
+                "default": "./lib/version.cjs",
+                "types": "./lib/version.d.cts"
+            }
+        },
+        "./http-client/body": {
+            "import": {
+                "default": "./lib/http-client/body.js",
+                "types": "./lib/http-client/body.d.ts"
+            },
+            "require": {
+                "default": "./lib/http-client/body.cjs",
+                "types": "./lib/http-client/body.d.cts"
+            }
+        },
+        "./http-client/client": {
+            "import": {
+                "default": "./lib/http-client/client.js",
+                "types": "./lib/http-client/client.d.ts"
+            },
+            "require": {
+                "default": "./lib/http-client/client.cjs",
+                "types": "./lib/http-client/client.d.cts"
+            }
+        },
+        "./http-client": {
+            "import": {
+                "default": "./lib/http-client/index.js",
+                "types": "./lib/http-client/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/http-client/index.cjs",
+                "types": "./lib/http-client/index.d.cts"
+            }
+        },
+        "./internal/async": {
+            "import": {
+                "default": "./lib/internal/async.js",
+                "types": "./lib/internal/async.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/async.cjs",
+                "types": "./lib/internal/async.d.cts"
+            }
+        },
+        "./internal/def": {
+            "import": {
+                "default": "./lib/internal/def.js",
+                "types": "./lib/internal/def.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/def.cjs",
+                "types": "./lib/internal/def.d.cts"
+            }
+        },
+        "./internal/heap": {
+            "import": {
+                "default": "./lib/internal/heap.js",
+                "types": "./lib/internal/heap.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/heap.cjs",
+                "types": "./lib/internal/heap.d.cts"
+            }
+        },
+        "./internal/hex": {
+            "import": {
+                "default": "./lib/internal/hex.js",
+                "types": "./lib/internal/hex.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/hex.cjs",
+                "types": "./lib/internal/hex.d.cts"
+            }
+        },
+        "./internal": {
+            "import": {
+                "default": "./lib/internal/index.js",
+                "types": "./lib/internal/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/index.cjs",
+                "types": "./lib/internal/index.d.cts"
+            }
+        },
+        "./internal/io": {
+            "import": {
+                "default": "./lib/internal/io.js",
+                "types": "./lib/internal/io.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/io.cjs",
+                "types": "./lib/internal/io.d.cts"
+            }
+        },
+        "./internal/misc": {
+            "import": {
+                "default": "./lib/internal/misc.js",
+                "types": "./lib/internal/misc.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/misc.cjs",
+                "types": "./lib/internal/misc.d.cts"
+            }
+        },
+        "./internal/selection": {
+            "import": {
+                "default": "./lib/internal/selection.js",
+                "types": "./lib/internal/selection.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/selection.cjs",
+                "types": "./lib/internal/selection.d.cts"
+            }
+        },
+        "./internal/throttler": {
+            "import": {
+                "default": "./lib/internal/throttler.js",
+                "types": "./lib/internal/throttler.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/throttler.cjs",
+                "types": "./lib/internal/throttler.d.cts"
+            }
+        },
+        "./internal/timeout": {
+            "import": {
+                "default": "./lib/internal/timeout.js",
+                "types": "./lib/internal/timeout.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/timeout.cjs",
+                "types": "./lib/internal/timeout.d.cts"
+            }
+        },
+        "./portal/client.test": {
+            "import": {
+                "default": "./lib/portal/client.test.js",
+                "types": "./lib/portal/client.test.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/client.test.cjs",
+                "types": "./lib/portal/client.test.d.cts"
+            }
+        },
+        "./portal/client": {
+            "import": {
+                "default": "./lib/portal/client.js",
+                "types": "./lib/portal/client.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/client.cjs",
+                "types": "./lib/portal/client.d.cts"
+            }
+        },
+        "./portal/common": {
+            "import": {
+                "default": "./lib/portal/common.js",
+                "types": "./lib/portal/common.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/common.cjs",
+                "types": "./lib/portal/common.d.cts"
+            }
+        },
+        "./portal/data-source": {
+            "import": {
+                "default": "./lib/portal/data-source.js",
+                "types": "./lib/portal/data-source.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/data-source.cjs",
+                "types": "./lib/portal/data-source.d.cts"
+            }
+        },
+        "./portal": {
+            "import": {
+                "default": "./lib/portal/index.js",
+                "types": "./lib/portal/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/index.cjs",
+                "types": "./lib/portal/index.d.cts"
+            }
+        },
+        "./portal/query": {
+            "import": {
+                "default": "./lib/portal/query.js",
+                "types": "./lib/portal/query.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/query.cjs",
+                "types": "./lib/portal/query.d.cts"
+            }
+        },
+        "./validation/dsl": {
+            "import": {
+                "default": "./lib/validation/dsl.js",
+                "types": "./lib/validation/dsl.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/dsl.cjs",
+                "types": "./lib/validation/dsl.d.cts"
+            }
+        },
+        "./validation/error": {
+            "import": {
+                "default": "./lib/validation/error.js",
+                "types": "./lib/validation/error.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/error.cjs",
+                "types": "./lib/validation/error.d.cts"
+            }
+        },
+        "./validation": {
+            "import": {
+                "default": "./lib/validation/index.js",
+                "types": "./lib/validation/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/index.cjs",
+                "types": "./lib/validation/index.d.cts"
+            }
+        },
+        "./validation/interface": {
+            "import": {
+                "default": "./lib/validation/interface.js",
+                "types": "./lib/validation/interface.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/interface.cjs",
+                "types": "./lib/validation/interface.d.cts"
+            }
+        },
+        "./validation/primitives": {
+            "import": {
+                "default": "./lib/validation/primitives.js",
+                "types": "./lib/validation/primitives.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/primitives.cjs",
+                "types": "./lib/validation/primitives.d.cts"
+            }
+        },
+        "./validation/util": {
+            "import": {
+                "default": "./lib/validation/util.js",
+                "types": "./lib/validation/util.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/util.cjs",
+                "types": "./lib/validation/util.d.cts"
+            }
+        },
+        "./pipeline/block": {
+            "import": {
+                "default": "./lib/pipeline/block.js",
+                "types": "./lib/pipeline/block.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/block.cjs",
+                "types": "./lib/pipeline/block.d.cts"
+            }
+        },
+        "./pipeline/core": {
+            "import": {
+                "default": "./lib/pipeline/core.js",
+                "types": "./lib/pipeline/core.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/core.cjs",
+                "types": "./lib/pipeline/core.d.cts"
+            }
+        },
+        "./pipeline/cursor": {
+            "import": {
+                "default": "./lib/pipeline/cursor.js",
+                "types": "./lib/pipeline/cursor.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/cursor.cjs",
+                "types": "./lib/pipeline/cursor.d.cts"
+            }
+        },
+        "./pipeline/errors": {
+            "import": {
+                "default": "./lib/pipeline/errors.js",
+                "types": "./lib/pipeline/errors.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/errors.cjs",
+                "types": "./lib/pipeline/errors.d.cts"
+            }
+        },
+        "./pipeline": {
+            "import": {
+                "default": "./lib/pipeline/index.js",
+                "types": "./lib/pipeline/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/index.cjs",
+                "types": "./lib/pipeline/index.d.cts"
+            }
+        },
+        "./logger/demo": {
+            "import": {
+                "default": "./lib/logger/demo.js",
+                "types": "./lib/logger/demo.d.ts"
+            },
+            "require": {
+                "default": "./lib/logger/demo.cjs",
+                "types": "./lib/logger/demo.d.cts"
+            }
+        },
+        "./logger": {
+            "import": {
+                "default": "./lib/logger/index.js",
+                "types": "./lib/logger/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/logger/index.cjs",
+                "types": "./lib/logger/index.d.cts"
+            }
+        },
+        "./logger/level": {
+            "import": {
+                "default": "./lib/logger/level.js",
+                "types": "./lib/logger/level.d.ts"
+            },
+            "require": {
+                "default": "./lib/logger/level.cjs",
+                "types": "./lib/logger/level.d.cts"
+            }
+        },
+        "./logger/logger": {
+            "import": {
+                "default": "./lib/logger/logger.js",
+                "types": "./lib/logger/logger.d.ts"
+            },
+            "require": {
+                "default": "./lib/logger/logger.cjs",
+                "types": "./lib/logger/logger.d.cts"
+            }
+        },
+        "./internal/range": {
+            "import": {
+                "default": "./lib/internal/range/index.js",
+                "types": "./lib/internal/range/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/range/index.cjs",
+                "types": "./lib/internal/range/index.d.cts"
+            }
+        },
+        "./internal/range/interfaces": {
+            "import": {
+                "default": "./lib/internal/range/interfaces.js",
+                "types": "./lib/internal/range/interfaces.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/range/interfaces.cjs",
+                "types": "./lib/internal/range/interfaces.d.cts"
+            }
+        },
+        "./internal/range/requests": {
+            "import": {
+                "default": "./lib/internal/range/requests.js",
+                "types": "./lib/internal/range/requests.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/range/requests.cjs",
+                "types": "./lib/internal/range/requests.d.cts"
+            }
+        },
+        "./internal/range/util": {
+            "import": {
+                "default": "./lib/internal/range/util.js",
+                "types": "./lib/internal/range/util.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/range/util.cjs",
+                "types": "./lib/internal/range/util.d.cts"
+            }
+        },
+        "./internal/types": {
+            "import": {
+                "default": "./lib/internal/types/index.js",
+                "types": "./lib/internal/types/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/types/index.cjs",
+                "types": "./lib/internal/types/index.d.cts"
+            }
+        },
+        "./internal/types/misc": {
+            "import": {
+                "default": "./lib/internal/types/misc.js",
+                "types": "./lib/internal/types/misc.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/types/misc.cjs",
+                "types": "./lib/internal/types/misc.d.cts"
+            }
+        },
+        "./internal/types/primitive": {
+            "import": {
+                "default": "./lib/internal/types/primitive.js",
+                "types": "./lib/internal/types/primitive.d.ts"
+            },
+            "require": {
+                "default": "./lib/internal/types/primitive.cjs",
+                "types": "./lib/internal/types/primitive.d.cts"
+            }
+        },
+        "./portal/evm": {
+            "import": {
+                "default": "./lib/portal/evm/index.js",
+                "types": "./lib/portal/evm/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/evm/index.cjs",
+                "types": "./lib/portal/evm/index.d.cts"
+            }
+        },
+        "./portal/evm/query": {
+            "import": {
+                "default": "./lib/portal/evm/query.js",
+                "types": "./lib/portal/evm/query.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/evm/query.cjs",
+                "types": "./lib/portal/evm/query.d.cts"
+            }
+        },
+        "./portal/solana": {
+            "import": {
+                "default": "./lib/portal/solana/index.js",
+                "types": "./lib/portal/solana/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/solana/index.cjs",
+                "types": "./lib/portal/solana/index.d.cts"
+            }
+        },
+        "./portal/solana/query": {
+            "import": {
+                "default": "./lib/portal/solana/query.js",
+                "types": "./lib/portal/solana/query.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/solana/query.cjs",
+                "types": "./lib/portal/solana/query.d.cts"
+            }
+        },
+        "./portal/substrate": {
+            "import": {
+                "default": "./lib/portal/substrate/index.js",
+                "types": "./lib/portal/substrate/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/substrate/index.cjs",
+                "types": "./lib/portal/substrate/index.d.cts"
+            }
+        },
+        "./portal/substrate/query": {
+            "import": {
+                "default": "./lib/portal/substrate/query.js",
+                "types": "./lib/portal/substrate/query.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/substrate/query.cjs",
+                "types": "./lib/portal/substrate/query.d.cts"
+            }
+        },
+        "./validation/composite/array": {
+            "import": {
+                "default": "./lib/validation/composite/array.js",
+                "types": "./lib/validation/composite/array.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/composite/array.cjs",
+                "types": "./lib/validation/composite/array.d.cts"
+            }
+        },
+        "./validation/composite/constant": {
+            "import": {
+                "default": "./lib/validation/composite/constant.js",
+                "types": "./lib/validation/composite/constant.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/composite/constant.cjs",
+                "types": "./lib/validation/composite/constant.d.cts"
+            }
+        },
+        "./validation/composite/default": {
+            "import": {
+                "default": "./lib/validation/composite/default.js",
+                "types": "./lib/validation/composite/default.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/composite/default.cjs",
+                "types": "./lib/validation/composite/default.d.cts"
+            }
+        },
+        "./validation/composite/key-tagged-union": {
+            "import": {
+                "default": "./lib/validation/composite/key-tagged-union.js",
+                "types": "./lib/validation/composite/key-tagged-union.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/composite/key-tagged-union.cjs",
+                "types": "./lib/validation/composite/key-tagged-union.d.cts"
+            }
+        },
+        "./validation/composite/nullable": {
+            "import": {
+                "default": "./lib/validation/composite/nullable.js",
+                "types": "./lib/validation/composite/nullable.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/composite/nullable.cjs",
+                "types": "./lib/validation/composite/nullable.d.cts"
+            }
+        },
+        "./validation/composite/object": {
+            "import": {
+                "default": "./lib/validation/composite/object.js",
+                "types": "./lib/validation/composite/object.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/composite/object.cjs",
+                "types": "./lib/validation/composite/object.d.cts"
+            }
+        },
+        "./validation/composite/one-of": {
+            "import": {
+                "default": "./lib/validation/composite/one-of.js",
+                "types": "./lib/validation/composite/one-of.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/composite/one-of.cjs",
+                "types": "./lib/validation/composite/one-of.d.cts"
+            }
+        },
+        "./validation/composite/option": {
+            "import": {
+                "default": "./lib/validation/composite/option.js",
+                "types": "./lib/validation/composite/option.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/composite/option.cjs",
+                "types": "./lib/validation/composite/option.d.cts"
+            }
+        },
+        "./validation/composite/record": {
+            "import": {
+                "default": "./lib/validation/composite/record.js",
+                "types": "./lib/validation/composite/record.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/composite/record.cjs",
+                "types": "./lib/validation/composite/record.d.cts"
+            }
+        },
+        "./validation/composite/ref": {
+            "import": {
+                "default": "./lib/validation/composite/ref.js",
+                "types": "./lib/validation/composite/ref.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/composite/ref.cjs",
+                "types": "./lib/validation/composite/ref.d.cts"
+            }
+        },
+        "./validation/composite/sentinel": {
+            "import": {
+                "default": "./lib/validation/composite/sentinel.js",
+                "types": "./lib/validation/composite/sentinel.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/composite/sentinel.cjs",
+                "types": "./lib/validation/composite/sentinel.d.cts"
+            }
+        },
+        "./validation/composite/tagged-union": {
+            "import": {
+                "default": "./lib/validation/composite/tagged-union.js",
+                "types": "./lib/validation/composite/tagged-union.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/composite/tagged-union.cjs",
+                "types": "./lib/validation/composite/tagged-union.d.cts"
+            }
+        },
+        "./validation/composite/tuple": {
+            "import": {
+                "default": "./lib/validation/composite/tuple.js",
+                "types": "./lib/validation/composite/tuple.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/composite/tuple.cjs",
+                "types": "./lib/validation/composite/tuple.d.cts"
+            }
+        },
+        "./pipeline/tools/finalizer": {
+            "import": {
+                "default": "./lib/pipeline/tools/finalizer.js",
+                "types": "./lib/pipeline/tools/finalizer.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/tools/finalizer.cjs",
+                "types": "./lib/pipeline/tools/finalizer.d.cts"
+            }
+        },
+        "./pipeline/tools": {
+            "import": {
+                "default": "./lib/pipeline/tools/index.js",
+                "types": "./lib/pipeline/tools/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/tools/index.cjs",
+                "types": "./lib/pipeline/tools/index.d.cts"
+            }
+        },
+        "./pipeline/tools/mapper": {
+            "import": {
+                "default": "./lib/pipeline/tools/mapper.js",
+                "types": "./lib/pipeline/tools/mapper.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/tools/mapper.cjs",
+                "types": "./lib/pipeline/tools/mapper.d.cts"
+            }
+        },
+        "./pipeline/tools/tracker": {
+            "import": {
+                "default": "./lib/pipeline/tools/tracker.js",
+                "types": "./lib/pipeline/tools/tracker.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/tools/tracker.cjs",
+                "types": "./lib/pipeline/tools/tracker.d.cts"
+            }
+        },
+        "./pipeline/tools/transformer": {
+            "import": {
+                "default": "./lib/pipeline/tools/transformer.js",
+                "types": "./lib/pipeline/tools/transformer.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/tools/transformer.cjs",
+                "types": "./lib/pipeline/tools/transformer.d.cts"
+            }
+        },
+        "./logger/sinks/json": {
+            "import": {
+                "default": "./lib/logger/sinks/json.js",
+                "types": "./lib/logger/sinks/json.d.ts"
+            },
+            "require": {
+                "default": "./lib/logger/sinks/json.cjs",
+                "types": "./lib/logger/sinks/json.d.cts"
+            }
+        },
+        "./logger/sinks/pretty": {
+            "import": {
+                "default": "./lib/logger/sinks/pretty.js",
+                "types": "./lib/logger/sinks/pretty.d.ts"
+            },
+            "require": {
+                "default": "./lib/logger/sinks/pretty.cjs",
+                "types": "./lib/logger/sinks/pretty.d.cts"
+            }
+        }
     }
 }

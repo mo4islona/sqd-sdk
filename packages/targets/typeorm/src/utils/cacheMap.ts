@@ -3,9 +3,6 @@ import type {EntityLiteral} from './misc'
 import type {Logger} from '@belopash/core/logger'
 import fastCopy from 'fast-copy'
 
-// FIXME: there is a bug with fast-copy
-const clone = typeof fastCopy === 'function' ? fastCopy : (fastCopy as any).default as typeof fastCopy
-
 export class CachedEntity<E extends EntityLiteral = EntityLiteral> {
     constructor(public value: E | null = null) {}
 }
@@ -75,7 +72,7 @@ export class CacheMap {
             if (!opts?.override && cachedColumnValue !== undefined) continue
             if (!opts?.nullify && objectColumnValue === undefined) continue
             if (objectColumnValue === cachedColumnValue && objectColumnValue !== undefined) continue
-            column.setEntityValue(cachedEntity, clone(objectColumnValue ?? null))
+            column.setEntityValue(cachedEntity, fastCopy(objectColumnValue ?? null))
         }
 
         for (const relation of metadata.relations) {
