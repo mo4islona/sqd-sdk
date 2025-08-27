@@ -1,4 +1,4 @@
-import {last} from '../internal/misc'
+import {last, maybeLast} from '../internal/misc'
 import {Throttler} from '../internal/throttler'
 import {type DataMessage, createSource} from '../pipeline'
 import {BlockRefUtils} from '../pipeline/block'
@@ -40,6 +40,8 @@ export function portalDataSource<TQuery extends Query>(options: PortalDataSource
         }
 
         try {
+            let lastCursor = offset
+
             for await (const batch of portal.getStream(streamQuery)) {
                 const portalHead = await headThrottler.get()
                 if (!portalHead) continue // no data?
@@ -49,7 +51,9 @@ export function portalDataSource<TQuery extends Query>(options: PortalDataSource
                     cursor: {number: value.header.number, hash: value.header.hash},
                 }))
 
-                const cursor = last(data).cursor
+                const cursor = maybeLast(data)?.cursor ?? lastCursor
+                if (!cursor) continue
+                
                 const head = calculateHead(portalHead, cursor)
                 const finalizedHead = batch.finalizedHead
 
@@ -60,6 +64,8 @@ export function portalDataSource<TQuery extends Query>(options: PortalDataSource
                     finalizedHead,
                     data,
                 }
+
+                lastCursor = cursor
             }
         } catch (err) {
             if (isForkException(err)) {

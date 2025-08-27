@@ -18,7 +18,7 @@
         "publish": "npm publish package.tgz"
     },
     "dependencies": {
-        "@belopash/core": "^0.0.1",
+        "@belopash/core": "link:../../core/dist",
         "bs58": "^6.0.0"
     },
     "devDependencies": {
