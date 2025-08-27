@@ -1,16 +1,21 @@
-import {HttpClient} from '@belopash/core/http-client'
-import {assert} from '@belopash/core/internal/misc'
-import {createLogger} from '@belopash/core/logger'
-import {createStream, createTracker, createMapper} from '@belopash/core/pipeline'
+import {In} from 'typeorm'
 import {PortalClient} from '@belopash/core/portal'
-import {solanaPortalDataSource, SolanaQueryBuilder} from '@belopash/solana-stream'
+import {HttpClient} from '@belopash/core/http-client'
+import {createStream, createTracker} from '@belopash/core/pipeline'
 import {createTypeormTarget} from '@belopash/typeorm-target/database'
-import * as tokenProgram from './abi/token-program'
-import * as whirlpool from './abi/whirlpool'
-import {Exchange} from './model'
+import {evmPortalDataSource, EvmQueryBuilder} from '@belopash/evm-stream'
+import * as factoryAbi from './abi/factory'
+import * as poolAbi from './abi/pool'
+import {Pool, Swap} from './model'
+import type {Store as OrmStore} from '@belopash/typeorm-target'
+import {createLogger} from '@belopash/core/logger'
 
-const portal = new PortalClient({
-    url: 'https://portal.sqd.dev/datasets/solana-mainnet',
+let factoryPools: Set<string>
+
+export const FACTORY_ADDRESS = '0x1f98431c8ad98523631ae4a59f267346ea31f984'
+
+let portal = new PortalClient({
+    url: 'https://portal.sqd.dev/datasets/ethereum-mainnet',
     http: new HttpClient({
         retryAttempts: Number.POSITIVE_INFINITY,
     }),
@@ -19,115 +24,188 @@ const portal = new PortalClient({
 
 async function main() {
     let head = await portal.getHead().then((h) => h?.number ?? 0)
-    let fromBlock = head - 100_000
-    let toBlock = undefined
 
-    console.log(`processing range: [${fromBlock}, ${toBlock ?? null}]`)
-
-    const whirlpoolQuery = new SolanaQueryBuilder()
-        .addInstruction({
+    const evmQuery = new EvmQueryBuilder()
+        .addLog({
             request: {
-                programId: ['whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc'],
-                d8: ['0xf8c69e91e17587c8'],
-                isCommitted: true,
-                innerInstructions: true,
+                address: [FACTORY_ADDRESS],
+                topic0: [factoryAbi.events.PoolCreated.topic],
+            },
+        })
+        .addLog({
+            request: {
+                topic0: [poolAbi.events.Swap.topic],
                 transaction: true,
-                transactionTokenBalances: true,
             },
         })
         .build()
 
     await createStream(() =>
-        solanaPortalDataSource({
+        evmPortalDataSource({
             portal,
             fields: {
                 block: {number: true, timestamp: true, hash: true, parentHash: true},
-                transaction: {signatures: true, err: true, transactionIndex: true},
-                instruction: {
-                    programId: true,
-                    accounts: true,
+                log: {
+                    address: true,
+                    topics: true,
                     data: true,
-                    isCommitted: true,
                     transactionIndex: true,
-                    instructionAddress: true,
+                    transactionHash: true,
+                    logIndex: true,
                 },
-                tokenBalance: {
-                    account: true,
-                    preMint: true,
-                    preOwner: true,
-                    preAmount: true,
-                    postMint: true,
-                    postOwner: true,
-                    postAmount: true,
-                },
+                transaction: {hash: true, transactionIndex: true},
             },
-            request: whirlpoolQuery,
+            request: evmQuery,
         }),
     )
-        //.pipe(createFinalizer())
-        .pipe(
-            createMapper((block) => {
-                return {
-                    ...block,
-                    mapped: true,
-                }
-            }),
-        )
-        .pipe(createProgressTracker('solana'))
+        .pipe(createProgressTracker('evm'))
         .pipe(
             createTypeormTarget({}, async (store, batch) => {
+                if (!factoryPools) {
+                    factoryPools = await store.findBy(Pool, {}).then((q) => new Set(q.map((i) => i.id)))
+                }
+
+                let pools: PoolData[] = []
+                let swaps: SwapEvent[] = []
+
                 for (let block of batch) {
-                    for (let ins of block.instructions) {
-                        if (ins.programId === whirlpool.programId && ins.d8 === whirlpool.instructions.swap.d8) {
-                            let exchange = new Exchange({
-                                id: formatId(block.header, ins.transactionIndex, ...ins.instructionAddress),
-                                slot: block.header.number,
-                                tx: ins.transaction?.signatures[0] ?? 'null',
-                                timestamp: new Date(block.header.timestamp * 1000),
-                            })
+                    for (let log of block.logs) {
+                        const address = log.address.toLowerCase()
+                        const topic0 = log.topics[0]?.toLowerCase()
 
-                            assert(ins.inner.length === 2)
-                            let srcTransfer = tokenProgram.transfer.decode(ins.inner[0])
-                            let destTransfer = tokenProgram.transfer.decode(ins.inner[1])
-
-                            let srcBalance = ins.transaction?.tokenBalances.find(
-                                (tb) => tb.account === srcTransfer.accounts.source,
-                            )
-                            let destBalance = ins.transaction?.tokenBalances.find(
-                                (tb) => tb.account === destTransfer.accounts.destination,
-                            )
-
-                            let srcMint = ins.transaction?.tokenBalances.find(
-                                (tb) => tb.account === srcTransfer.accounts.destination,
-                            )?.preMint
-                            let destMint = ins.transaction?.tokenBalances.find(
-                                (tb) => tb.account === destTransfer.accounts.source,
-                            )?.preMint
-
-                            assert(srcMint != null)
-                            assert(destMint != null)
-
-                            exchange.fromToken = srcMint
-                            exchange.fromOwner = srcBalance?.preOwner || srcTransfer.accounts.source
-                            exchange.fromAmount = srcTransfer.data.amount
-
-                            exchange.toToken = destMint
-                            exchange.toOwner =
-                                destBalance?.postOwner || destBalance?.preOwner || destTransfer.accounts.destination
-                            exchange.toAmount = destTransfer.data.amount
-
-                            await store.insert(exchange)
+                        if (address === FACTORY_ADDRESS && topic0 === factoryAbi.events.PoolCreated.topic) {
+                            pools.push(getPoolData(log))
+                        } else if (topic0 === poolAbi.events.Swap.topic && factoryPools.has(address)) {
+                            swaps.push(getSwap(block, log))
                         }
                     }
                 }
+
+                await createPools(store, pools)
+                await processSwaps(store, swaps)
             }),
         )
 
     console.log('end')
 }
 
+function createFactoryFilter() {}
+
+interface PoolData {
+    id: string
+    token0: string
+    token1: string
+}
+
+function getPoolData(log: {address: string; data: string; topics: string[]}): PoolData {
+    let event = factoryAbi.events.PoolCreated.decode(log)
+
+    let id = event.pool.toLowerCase()
+    let token0 = event.token0.toLowerCase()
+    let token1 = event.token1.toLowerCase()
+
+    return {
+        id,
+        token0,
+        token1,
+    }
+}
+
+async function createPools(store: {insert: (e: any) => Promise<unknown>}, poolsData: PoolData[]) {
+    let pools: Pool[] = []
+
+    for (let p of poolsData) {
+        let pool = new Pool(p)
+        pools.push(pool)
+        factoryPools.add(pool.id)
+    }
+
+    if (pools.length > 0) {
+        await store.insert(pools)
+    }
+}
+
+interface SwapEvent {
+    id: string
+    block: {height: number; timestamp: number}
+    pool: string
+    amount0: bigint
+    amount1: bigint
+    recipient: string
+    sender: string
+    txHash: string
+}
+
+function getSwap(
+    block: {header: {number: number; timestamp: number; hash: string}},
+    log: {
+        address: string
+        data: string
+        topics: string[]
+        transactionIndex: number
+        transactionHash: string
+        logIndex: number
+    },
+): SwapEvent {
+    let event = poolAbi.events.Swap.decode(log)
+
+    let pool = log.address.toLowerCase()
+    let recipient = event.recipient.toLowerCase()
+    let sender = event.sender.toLowerCase()
+
+    return {
+        id: formatId({number: block.header.number, hash: block.header.hash}, log.transactionIndex, log.logIndex),
+        block: {height: block.header.number, timestamp: block.header.timestamp},
+        txHash: log.transactionHash,
+        pool,
+        amount0: event.amount0,
+        amount1: event.amount1,
+        recipient,
+        sender,
+    }
+}
+
+async function processSwaps(store: Pick<OrmStore, 'findBy' | 'insert'>, swapsData: SwapEvent[]) {
+    let poolIds = new Set<string>()
+    for (let t of swapsData) {
+        poolIds.add(t.pool)
+    }
+
+    let pools = await store.findBy(Pool, {id: In([...poolIds]) as unknown as any}).then(toEntityMap)
+
+    let swaps: Swap[] = []
+    for (let s of swapsData) {
+        let {id, block, txHash, amount0, amount1, recipient, sender} = s
+
+        let pool = pools.get(s.pool)
+        if (!pool) continue
+
+        swaps.push(
+            new Swap({
+                id,
+                blockNumber: block.height,
+                timestamp: new Date(block.timestamp),
+                txHash,
+                pool,
+                amount0,
+                amount1,
+                recipient,
+                sender,
+            }),
+        )
+    }
+
+    if (swaps.length > 0) {
+        await store.insert(swaps)
+    }
+}
+
+function toEntityMap<E extends {id: string}>(entities: E[]): Map<string, E> {
+    return new Map(entities.map((e) => [e.id, e]))
+}
+
 export function createProgressTracker<
-    TCursor extends {number: number; hash: string; test: string},
+    TCursor extends {number: number; hash: string},
     TValue extends {header: {timestamp: number}},
     TRequest,
 >(prefix: string) {

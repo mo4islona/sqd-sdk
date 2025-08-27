@@ -7,6 +7,7 @@ import {
     type DataBatchItem,
     type DataForkMessage,
     type DataStream,
+    type DataDuplex,
 } from '../core'
 import {maybeLast} from '../../internal/misc'
 
@@ -157,7 +158,14 @@ function handleFork<TCursor, TValue>({
     }
 }
 
-export function createFinalizer<TCursor, TValue, TRequest>() {
+export function createFinalizer<TCursor, TValue, TRequest>(): DataDuplex<
+    TCursor,
+    TValue,
+    TRequest,
+    TCursor,
+    TValue,
+    TRequest
+> {
     return createTarget<TCursor, TValue, TRequest, DataStream<TCursor, TValue, TRequest>>({
         unfinalized: true,
         write: (writeOptions) =>

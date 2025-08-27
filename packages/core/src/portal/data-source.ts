@@ -1,6 +1,6 @@
 import {last, maybeLast} from '../internal/misc'
 import {Throttler} from '../internal/throttler'
-import {type DataMessage, createSource} from '../pipeline'
+import {type DataMessage, createSource, type DataSource} from '../pipeline'
 import {BlockRefUtils} from '../pipeline/block'
 import {type BlockRef, PortalClient, type PortalClientOptions, isForkException} from './client'
 import type {GetBlock, Query} from './query'
@@ -17,7 +17,9 @@ function calculateHead(portalHead: BlockRef, lastBlock: BlockRef | undefined): B
 
 export type PortalData<TQuery extends Query> = GetBlock<TQuery>
 
-export function portalDataSource<TQuery extends Query>(options: PortalDataSourceOptions<TQuery>) {
+export function portalDataSource<TQuery extends Query>(
+    options: PortalDataSourceOptions<TQuery>,
+): DataSource<BlockRef, PortalData<TQuery>, TQuery> {
     const portal = options.portal instanceof PortalClient ? options.portal : new PortalClient(options.portal)
     const headThrottler = new Throttler(async () => portal.getHead(), 5_000)
 
@@ -53,7 +55,7 @@ export function portalDataSource<TQuery extends Query>(options: PortalDataSource
 
                 const cursor = maybeLast(data)?.cursor ?? lastCursor
                 if (!cursor) continue
-                
+
                 const head = calculateHead(portalHead, cursor)
                 const finalizedHead = batch.finalizedHead
 

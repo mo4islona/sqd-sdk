@@ -22,7 +22,7 @@ common/autoinstallers/*/.npmrc
 .vscode
 
 # Built js libs
-**/*/lib
+**/*/lib*
 **/*/dist*
 **/*/package.tgz
 

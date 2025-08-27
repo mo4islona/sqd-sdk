@@ -174,64 +174,94 @@
                 "types": "./lib/internal/timeout.d.cts"
             }
         },
-        "./portal/client.test": {
+        "./logger/demo": {
             "import": {
-                "default": "./lib/portal/client.test.js",
-                "types": "./lib/portal/client.test.d.ts"
+                "default": "./lib/logger/demo.js",
+                "types": "./lib/logger/demo.d.ts"
             },
             "require": {
-                "default": "./lib/portal/client.test.cjs",
-                "types": "./lib/portal/client.test.d.cts"
+                "default": "./lib/logger/demo.cjs",
+                "types": "./lib/logger/demo.d.cts"
             }
         },
-        "./portal/client": {
+        "./logger": {
             "import": {
-                "default": "./lib/portal/client.js",
-                "types": "./lib/portal/client.d.ts"
+                "default": "./lib/logger/index.js",
+                "types": "./lib/logger/index.d.ts"
             },
             "require": {
-                "default": "./lib/portal/client.cjs",
-                "types": "./lib/portal/client.d.cts"
+                "default": "./lib/logger/index.cjs",
+                "types": "./lib/logger/index.d.cts"
             }
         },
-        "./portal/common": {
+        "./logger/level": {
             "import": {
-                "default": "./lib/portal/common.js",
-                "types": "./lib/portal/common.d.ts"
+                "default": "./lib/logger/level.js",
+                "types": "./lib/logger/level.d.ts"
             },
             "require": {
-                "default": "./lib/portal/common.cjs",
-                "types": "./lib/portal/common.d.cts"
+                "default": "./lib/logger/level.cjs",
+                "types": "./lib/logger/level.d.cts"
             }
         },
-        "./portal/data-source": {
+        "./logger/logger": {
             "import": {
-                "default": "./lib/portal/data-source.js",
-                "types": "./lib/portal/data-source.d.ts"
+                "default": "./lib/logger/logger.js",
+                "types": "./lib/logger/logger.d.ts"
             },
             "require": {
-                "default": "./lib/portal/data-source.cjs",
-                "types": "./lib/portal/data-source.d.cts"
+                "default": "./lib/logger/logger.cjs",
+                "types": "./lib/logger/logger.d.cts"
             }
         },
-        "./portal": {
+        "./pipeline/block": {
             "import": {
-                "default": "./lib/portal/index.js",
-                "types": "./lib/portal/index.d.ts"
+                "default": "./lib/pipeline/block.js",
+                "types": "./lib/pipeline/block.d.ts"
             },
             "require": {
-                "default": "./lib/portal/index.cjs",
-                "types": "./lib/portal/index.d.cts"
+                "default": "./lib/pipeline/block.cjs",
+                "types": "./lib/pipeline/block.d.cts"
             }
         },
-        "./portal/query": {
+        "./pipeline/core": {
             "import": {
-                "default": "./lib/portal/query.js",
-                "types": "./lib/portal/query.d.ts"
+                "default": "./lib/pipeline/core.js",
+                "types": "./lib/pipeline/core.d.ts"
             },
             "require": {
-                "default": "./lib/portal/query.cjs",
-                "types": "./lib/portal/query.d.cts"
+                "default": "./lib/pipeline/core.cjs",
+                "types": "./lib/pipeline/core.d.cts"
+            }
+        },
+        "./pipeline/cursor": {
+            "import": {
+                "default": "./lib/pipeline/cursor.js",
+                "types": "./lib/pipeline/cursor.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/cursor.cjs",
+                "types": "./lib/pipeline/cursor.d.cts"
+            }
+        },
+        "./pipeline/errors": {
+            "import": {
+                "default": "./lib/pipeline/errors.js",
+                "types": "./lib/pipeline/errors.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/errors.cjs",
+                "types": "./lib/pipeline/errors.d.cts"
+            }
+        },
+        "./pipeline": {
+            "import": {
+                "default": "./lib/pipeline/index.js",
+                "types": "./lib/pipeline/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/index.cjs",
+                "types": "./lib/pipeline/index.d.cts"
             }
         },
         "./validation/dsl": {
@@ -294,94 +324,64 @@
                 "types": "./lib/validation/util.d.cts"
             }
         },
-        "./pipeline/block": {
+        "./portal/client.test": {
             "import": {
-                "default": "./lib/pipeline/block.js",
-                "types": "./lib/pipeline/block.d.ts"
+                "default": "./lib/portal/client.test.js",
+                "types": "./lib/portal/client.test.d.ts"
             },
             "require": {
-                "default": "./lib/pipeline/block.cjs",
-                "types": "./lib/pipeline/block.d.cts"
+                "default": "./lib/portal/client.test.cjs",
+                "types": "./lib/portal/client.test.d.cts"
             }
         },
-        "./pipeline/core": {
+        "./portal/client": {
             "import": {
-                "default": "./lib/pipeline/core.js",
-                "types": "./lib/pipeline/core.d.ts"
+                "default": "./lib/portal/client.js",
+                "types": "./lib/portal/client.d.ts"
             },
             "require": {
-                "default": "./lib/pipeline/core.cjs",
-                "types": "./lib/pipeline/core.d.cts"
+                "default": "./lib/portal/client.cjs",
+                "types": "./lib/portal/client.d.cts"
             }
         },
-        "./pipeline/cursor": {
+        "./portal/common": {
             "import": {
-                "default": "./lib/pipeline/cursor.js",
-                "types": "./lib/pipeline/cursor.d.ts"
+                "default": "./lib/portal/common.js",
+                "types": "./lib/portal/common.d.ts"
             },
             "require": {
-                "default": "./lib/pipeline/cursor.cjs",
-                "types": "./lib/pipeline/cursor.d.cts"
+                "default": "./lib/portal/common.cjs",
+                "types": "./lib/portal/common.d.cts"
             }
         },
-        "./pipeline/errors": {
+        "./portal/data-source": {
             "import": {
-                "default": "./lib/pipeline/errors.js",
-                "types": "./lib/pipeline/errors.d.ts"
+                "default": "./lib/portal/data-source.js",
+                "types": "./lib/portal/data-source.d.ts"
             },
             "require": {
-                "default": "./lib/pipeline/errors.cjs",
-                "types": "./lib/pipeline/errors.d.cts"
+                "default": "./lib/portal/data-source.cjs",
+                "types": "./lib/portal/data-source.d.cts"
             }
         },
-        "./pipeline": {
+        "./portal": {
             "import": {
-                "default": "./lib/pipeline/index.js",
-                "types": "./lib/pipeline/index.d.ts"
+                "default": "./lib/portal/index.js",
+                "types": "./lib/portal/index.d.ts"
             },
             "require": {
-                "default": "./lib/pipeline/index.cjs",
-                "types": "./lib/pipeline/index.d.cts"
+                "default": "./lib/portal/index.cjs",
+                "types": "./lib/portal/index.d.cts"
             }
         },
-        "./logger/demo": {
+        "./portal/query": {
             "import": {
-                "default": "./lib/logger/demo.js",
-                "types": "./lib/logger/demo.d.ts"
+                "default": "./lib/portal/query.js",
+                "types": "./lib/portal/query.d.ts"
             },
             "require": {
-                "default": "./lib/logger/demo.cjs",
-                "types": "./lib/logger/demo.d.cts"
-            }
-        },
-        "./logger": {
-            "import": {
-                "default": "./lib/logger/index.js",
-                "types": "./lib/logger/index.d.ts"
-            },
-            "require": {
-                "default": "./lib/logger/index.cjs",
-                "types": "./lib/logger/index.d.cts"
-            }
-        },
-        "./logger/level": {
-            "import": {
-                "default": "./lib/logger/level.js",
-                "types": "./lib/logger/level.d.ts"
-            },
-            "require": {
-                "default": "./lib/logger/level.cjs",
-                "types": "./lib/logger/level.d.cts"
-            }
-        },
-        "./logger/logger": {
-            "import": {
-                "default": "./lib/logger/logger.js",
-                "types": "./lib/logger/logger.d.ts"
-            },
-            "require": {
-                "default": "./lib/logger/logger.cjs",
-                "types": "./lib/logger/logger.d.cts"
+                "default": "./lib/portal/query.cjs",
+                "types": "./lib/portal/query.d.cts"
             }
         },
         "./internal/range": {
@@ -454,64 +454,74 @@
                 "types": "./lib/internal/types/primitive.d.cts"
             }
         },
-        "./portal/evm": {
+        "./logger/sinks/json": {
             "import": {
-                "default": "./lib/portal/evm/index.js",
-                "types": "./lib/portal/evm/index.d.ts"
+                "default": "./lib/logger/sinks/json.js",
+                "types": "./lib/logger/sinks/json.d.ts"
             },
             "require": {
-                "default": "./lib/portal/evm/index.cjs",
-                "types": "./lib/portal/evm/index.d.cts"
+                "default": "./lib/logger/sinks/json.cjs",
+                "types": "./lib/logger/sinks/json.d.cts"
             }
         },
-        "./portal/evm/query": {
+        "./logger/sinks/pretty": {
             "import": {
-                "default": "./lib/portal/evm/query.js",
-                "types": "./lib/portal/evm/query.d.ts"
+                "default": "./lib/logger/sinks/pretty.js",
+                "types": "./lib/logger/sinks/pretty.d.ts"
             },
             "require": {
-                "default": "./lib/portal/evm/query.cjs",
-                "types": "./lib/portal/evm/query.d.cts"
+                "default": "./lib/logger/sinks/pretty.cjs",
+                "types": "./lib/logger/sinks/pretty.d.cts"
             }
         },
-        "./portal/solana": {
+        "./pipeline/tools/finalizer": {
             "import": {
-                "default": "./lib/portal/solana/index.js",
-                "types": "./lib/portal/solana/index.d.ts"
+                "default": "./lib/pipeline/tools/finalizer.js",
+                "types": "./lib/pipeline/tools/finalizer.d.ts"
             },
             "require": {
-                "default": "./lib/portal/solana/index.cjs",
-                "types": "./lib/portal/solana/index.d.cts"
+                "default": "./lib/pipeline/tools/finalizer.cjs",
+                "types": "./lib/pipeline/tools/finalizer.d.cts"
             }
         },
-        "./portal/solana/query": {
+        "./pipeline/tools": {
             "import": {
-                "default": "./lib/portal/solana/query.js",
-                "types": "./lib/portal/solana/query.d.ts"
+                "default": "./lib/pipeline/tools/index.js",
+                "types": "./lib/pipeline/tools/index.d.ts"
             },
             "require": {
-                "default": "./lib/portal/solana/query.cjs",
-                "types": "./lib/portal/solana/query.d.cts"
+                "default": "./lib/pipeline/tools/index.cjs",
+                "types": "./lib/pipeline/tools/index.d.cts"
             }
         },
-        "./portal/substrate": {
+        "./pipeline/tools/mapper": {
             "import": {
-                "default": "./lib/portal/substrate/index.js",
-                "types": "./lib/portal/substrate/index.d.ts"
+                "default": "./lib/pipeline/tools/mapper.js",
+                "types": "./lib/pipeline/tools/mapper.d.ts"
             },
             "require": {
-                "default": "./lib/portal/substrate/index.cjs",
-                "types": "./lib/portal/substrate/index.d.cts"
+                "default": "./lib/pipeline/tools/mapper.cjs",
+                "types": "./lib/pipeline/tools/mapper.d.cts"
             }
         },
-        "./portal/substrate/query": {
+        "./pipeline/tools/tracker": {
             "import": {
-                "default": "./lib/portal/substrate/query.js",
-                "types": "./lib/portal/substrate/query.d.ts"
+                "default": "./lib/pipeline/tools/tracker.js",
+                "types": "./lib/pipeline/tools/tracker.d.ts"
             },
             "require": {
-                "default": "./lib/portal/substrate/query.cjs",
-                "types": "./lib/portal/substrate/query.d.cts"
+                "default": "./lib/pipeline/tools/tracker.cjs",
+                "types": "./lib/pipeline/tools/tracker.d.cts"
+            }
+        },
+        "./pipeline/tools/transformer": {
+            "import": {
+                "default": "./lib/pipeline/tools/transformer.js",
+                "types": "./lib/pipeline/tools/transformer.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/tools/transformer.cjs",
+                "types": "./lib/pipeline/tools/transformer.d.cts"
             }
         },
         "./validation/composite/array": {
@@ -644,74 +654,64 @@
                 "types": "./lib/validation/composite/tuple.d.cts"
             }
         },
-        "./pipeline/tools/finalizer": {
+        "./portal/evm": {
             "import": {
-                "default": "./lib/pipeline/tools/finalizer.js",
-                "types": "./lib/pipeline/tools/finalizer.d.ts"
+                "default": "./lib/portal/evm/index.js",
+                "types": "./lib/portal/evm/index.d.ts"
             },
             "require": {
-                "default": "./lib/pipeline/tools/finalizer.cjs",
-                "types": "./lib/pipeline/tools/finalizer.d.cts"
+                "default": "./lib/portal/evm/index.cjs",
+                "types": "./lib/portal/evm/index.d.cts"
             }
         },
-        "./pipeline/tools": {
+        "./portal/evm/query": {
             "import": {
-                "default": "./lib/pipeline/tools/index.js",
-                "types": "./lib/pipeline/tools/index.d.ts"
+                "default": "./lib/portal/evm/query.js",
+                "types": "./lib/portal/evm/query.d.ts"
             },
             "require": {
-                "default": "./lib/pipeline/tools/index.cjs",
-                "types": "./lib/pipeline/tools/index.d.cts"
+                "default": "./lib/portal/evm/query.cjs",
+                "types": "./lib/portal/evm/query.d.cts"
             }
         },
-        "./pipeline/tools/mapper": {
+        "./portal/solana": {
             "import": {
-                "default": "./lib/pipeline/tools/mapper.js",
-                "types": "./lib/pipeline/tools/mapper.d.ts"
+                "default": "./lib/portal/solana/index.js",
+                "types": "./lib/portal/solana/index.d.ts"
             },
             "require": {
-                "default": "./lib/pipeline/tools/mapper.cjs",
-                "types": "./lib/pipeline/tools/mapper.d.cts"
+                "default": "./lib/portal/solana/index.cjs",
+                "types": "./lib/portal/solana/index.d.cts"
             }
         },
-        "./pipeline/tools/tracker": {
+        "./portal/solana/query": {
             "import": {
-                "default": "./lib/pipeline/tools/tracker.js",
-                "types": "./lib/pipeline/tools/tracker.d.ts"
+                "default": "./lib/portal/solana/query.js",
+                "types": "./lib/portal/solana/query.d.ts"
             },
             "require": {
-                "default": "./lib/pipeline/tools/tracker.cjs",
-                "types": "./lib/pipeline/tools/tracker.d.cts"
+                "default": "./lib/portal/solana/query.cjs",
+                "types": "./lib/portal/solana/query.d.cts"
             }
         },
-        "./pipeline/tools/transformer": {
+        "./portal/substrate": {
             "import": {
-                "default": "./lib/pipeline/tools/transformer.js",
-                "types": "./lib/pipeline/tools/transformer.d.ts"
+                "default": "./lib/portal/substrate/index.js",
+                "types": "./lib/portal/substrate/index.d.ts"
             },
             "require": {
-                "default": "./lib/pipeline/tools/transformer.cjs",
-                "types": "./lib/pipeline/tools/transformer.d.cts"
+                "default": "./lib/portal/substrate/index.cjs",
+                "types": "./lib/portal/substrate/index.d.cts"
             }
         },
-        "./logger/sinks/json": {
+        "./portal/substrate/query": {
             "import": {
-                "default": "./lib/logger/sinks/json.js",
-                "types": "./lib/logger/sinks/json.d.ts"
+                "default": "./lib/portal/substrate/query.js",
+                "types": "./lib/portal/substrate/query.d.ts"
             },
             "require": {
-                "default": "./lib/logger/sinks/json.cjs",
-                "types": "./lib/logger/sinks/json.d.cts"
-            }
-        },
-        "./logger/sinks/pretty": {
-            "import": {
-                "default": "./lib/logger/sinks/pretty.js",
-                "types": "./lib/logger/sinks/pretty.d.ts"
-            },
-            "require": {
-                "default": "./lib/logger/sinks/pretty.cjs",
-                "types": "./lib/logger/sinks/pretty.d.cts"
+                "default": "./lib/portal/substrate/query.cjs",
+                "types": "./lib/portal/substrate/query.d.cts"
             }
         }
     }

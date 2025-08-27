@@ -281,7 +281,7 @@ export interface DataStream<TCursor, TValue, TRequest> {
 /**
  * Creates a data stream from a data source or source factory.
  *
- * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash) 
+ * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
  * @template TValue - The type of data values in the stream
  * @template TRequest - The type of additional request parameters that can be passed to the data source
  * @param sourceOrFactory - The data source or a factory function that creates a data source

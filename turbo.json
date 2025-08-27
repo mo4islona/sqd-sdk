@@ -16,12 +16,10 @@
                 "../README.md",
                 "tsconfig.json",
                 "tsconfig.*.json",
-                "tsup.config.ts",
-                "scripts/build.ts",
-                "scripts/fix-imports.ts",
+                "rollup.config.js",
                 "../tsconfig.json"
             ],
-            "outputs": ["dist/**", "dist-dts/**"],
+            "outputs": ["lib/**"],
             "outputLogs": "new-only"
         },
         "@belopash/solana-stream#build": {
@@ -33,12 +31,10 @@
                 "../README.md",
                 "tsconfig.json",
                 "tsconfig.*.json",
-                "tsup.config.ts",
-                "scripts/build.ts",
-                "scripts/fix-imports.ts",
+                "rollup.config.js",
                 "../tsconfig.json"
             ],
-            "outputs": ["dist/**", "dist-dts/**"],
+            "outputs": ["lib/**"],
             "outputLogs": "new-only"
         },
         "@belopash/evm-stream#build": {
@@ -50,12 +46,10 @@
                 "../README.md",
                 "tsconfig.json",
                 "tsconfig.*.json",
-                "tsup.config.ts",
-                "scripts/build.ts",
-                "scripts/fix-imports.ts",
+                "rollup.config.js",
                 "../tsconfig.json"
             ],
-            "outputs": ["dist/**", "dist-dts/**"],
+            "outputs": ["lib/**"],
             "outputLogs": "new-only"
         },
         "@belopash/typeorm-target#build": {
@@ -67,12 +61,10 @@
                 "../README.md",
                 "tsconfig.json",
                 "tsconfig.*.json",
-                "tsup.config.ts",
-                "scripts/build.ts",
-                "scripts/fix-imports.ts",
+                "rollup.config.js",
                 "../tsconfig.json"
             ],
-            "outputs": ["dist/**", "dist-dts/**"],
+            "outputs": ["lib/**"],
             "outputLogs": "new-only"
         }
     }

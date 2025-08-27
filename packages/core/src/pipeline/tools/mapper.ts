@@ -1,7 +1,9 @@
-import type {DataReadOptions} from '../core'
+import type {DataDuplex, DataReadOptions, DataTargetFactoryOptions} from '../core'
 import {createTransformer} from './transformer'
 
-export function createMapper<TCursor, TInValue, TOutValue, TRequest>(mapper: (input: TInValue) => TOutValue) {
+export function createMapper<TCursor, TInValue, TOutValue, TRequest>(
+    mapper: (input: TInValue) => TOutValue,
+): (opts: DataTargetFactoryOptions) => DataDuplex<TCursor, TInValue, TRequest, TCursor, TOutValue, TRequest> {
     return createTransformer<TCursor, TCursor, TInValue, TOutValue, TRequest, TRequest>((opts) => {
         return {
             cursorUtils: opts.cursorUtils,
