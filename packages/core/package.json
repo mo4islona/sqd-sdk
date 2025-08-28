@@ -264,66 +264,6 @@
                 "types": "./lib/pipeline/index.d.cts"
             }
         },
-        "./validation/dsl": {
-            "import": {
-                "default": "./lib/validation/dsl.js",
-                "types": "./lib/validation/dsl.d.ts"
-            },
-            "require": {
-                "default": "./lib/validation/dsl.cjs",
-                "types": "./lib/validation/dsl.d.cts"
-            }
-        },
-        "./validation/error": {
-            "import": {
-                "default": "./lib/validation/error.js",
-                "types": "./lib/validation/error.d.ts"
-            },
-            "require": {
-                "default": "./lib/validation/error.cjs",
-                "types": "./lib/validation/error.d.cts"
-            }
-        },
-        "./validation": {
-            "import": {
-                "default": "./lib/validation/index.js",
-                "types": "./lib/validation/index.d.ts"
-            },
-            "require": {
-                "default": "./lib/validation/index.cjs",
-                "types": "./lib/validation/index.d.cts"
-            }
-        },
-        "./validation/interface": {
-            "import": {
-                "default": "./lib/validation/interface.js",
-                "types": "./lib/validation/interface.d.ts"
-            },
-            "require": {
-                "default": "./lib/validation/interface.cjs",
-                "types": "./lib/validation/interface.d.cts"
-            }
-        },
-        "./validation/primitives": {
-            "import": {
-                "default": "./lib/validation/primitives.js",
-                "types": "./lib/validation/primitives.d.ts"
-            },
-            "require": {
-                "default": "./lib/validation/primitives.cjs",
-                "types": "./lib/validation/primitives.d.cts"
-            }
-        },
-        "./validation/util": {
-            "import": {
-                "default": "./lib/validation/util.js",
-                "types": "./lib/validation/util.d.ts"
-            },
-            "require": {
-                "default": "./lib/validation/util.cjs",
-                "types": "./lib/validation/util.d.cts"
-            }
-        },
         "./portal/client.test": {
             "import": {
                 "default": "./lib/portal/client.test.js",
@@ -382,6 +322,66 @@
             "require": {
                 "default": "./lib/portal/query.cjs",
                 "types": "./lib/portal/query.d.cts"
+            }
+        },
+        "./validation/dsl": {
+            "import": {
+                "default": "./lib/validation/dsl.js",
+                "types": "./lib/validation/dsl.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/dsl.cjs",
+                "types": "./lib/validation/dsl.d.cts"
+            }
+        },
+        "./validation/error": {
+            "import": {
+                "default": "./lib/validation/error.js",
+                "types": "./lib/validation/error.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/error.cjs",
+                "types": "./lib/validation/error.d.cts"
+            }
+        },
+        "./validation": {
+            "import": {
+                "default": "./lib/validation/index.js",
+                "types": "./lib/validation/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/index.cjs",
+                "types": "./lib/validation/index.d.cts"
+            }
+        },
+        "./validation/interface": {
+            "import": {
+                "default": "./lib/validation/interface.js",
+                "types": "./lib/validation/interface.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/interface.cjs",
+                "types": "./lib/validation/interface.d.cts"
+            }
+        },
+        "./validation/primitives": {
+            "import": {
+                "default": "./lib/validation/primitives.js",
+                "types": "./lib/validation/primitives.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/primitives.cjs",
+                "types": "./lib/validation/primitives.d.cts"
+            }
+        },
+        "./validation/util": {
+            "import": {
+                "default": "./lib/validation/util.js",
+                "types": "./lib/validation/util.d.ts"
+            },
+            "require": {
+                "default": "./lib/validation/util.cjs",
+                "types": "./lib/validation/util.d.cts"
             }
         },
         "./internal/range": {
@@ -524,6 +524,66 @@
                 "types": "./lib/pipeline/tools/transformer.d.cts"
             }
         },
+        "./portal/evm": {
+            "import": {
+                "default": "./lib/portal/evm/index.js",
+                "types": "./lib/portal/evm/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/evm/index.cjs",
+                "types": "./lib/portal/evm/index.d.cts"
+            }
+        },
+        "./portal/evm/query": {
+            "import": {
+                "default": "./lib/portal/evm/query.js",
+                "types": "./lib/portal/evm/query.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/evm/query.cjs",
+                "types": "./lib/portal/evm/query.d.cts"
+            }
+        },
+        "./portal/solana": {
+            "import": {
+                "default": "./lib/portal/solana/index.js",
+                "types": "./lib/portal/solana/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/solana/index.cjs",
+                "types": "./lib/portal/solana/index.d.cts"
+            }
+        },
+        "./portal/solana/query": {
+            "import": {
+                "default": "./lib/portal/solana/query.js",
+                "types": "./lib/portal/solana/query.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/solana/query.cjs",
+                "types": "./lib/portal/solana/query.d.cts"
+            }
+        },
+        "./portal/substrate": {
+            "import": {
+                "default": "./lib/portal/substrate/index.js",
+                "types": "./lib/portal/substrate/index.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/substrate/index.cjs",
+                "types": "./lib/portal/substrate/index.d.cts"
+            }
+        },
+        "./portal/substrate/query": {
+            "import": {
+                "default": "./lib/portal/substrate/query.js",
+                "types": "./lib/portal/substrate/query.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/substrate/query.cjs",
+                "types": "./lib/portal/substrate/query.d.cts"
+            }
+        },
         "./validation/composite/array": {
             "import": {
                 "default": "./lib/validation/composite/array.js",
@@ -652,66 +712,6 @@
             "require": {
                 "default": "./lib/validation/composite/tuple.cjs",
                 "types": "./lib/validation/composite/tuple.d.cts"
-            }
-        },
-        "./portal/evm": {
-            "import": {
-                "default": "./lib/portal/evm/index.js",
-                "types": "./lib/portal/evm/index.d.ts"
-            },
-            "require": {
-                "default": "./lib/portal/evm/index.cjs",
-                "types": "./lib/portal/evm/index.d.cts"
-            }
-        },
-        "./portal/evm/query": {
-            "import": {
-                "default": "./lib/portal/evm/query.js",
-                "types": "./lib/portal/evm/query.d.ts"
-            },
-            "require": {
-                "default": "./lib/portal/evm/query.cjs",
-                "types": "./lib/portal/evm/query.d.cts"
-            }
-        },
-        "./portal/solana": {
-            "import": {
-                "default": "./lib/portal/solana/index.js",
-                "types": "./lib/portal/solana/index.d.ts"
-            },
-            "require": {
-                "default": "./lib/portal/solana/index.cjs",
-                "types": "./lib/portal/solana/index.d.cts"
-            }
-        },
-        "./portal/solana/query": {
-            "import": {
-                "default": "./lib/portal/solana/query.js",
-                "types": "./lib/portal/solana/query.d.ts"
-            },
-            "require": {
-                "default": "./lib/portal/solana/query.cjs",
-                "types": "./lib/portal/solana/query.d.cts"
-            }
-        },
-        "./portal/substrate": {
-            "import": {
-                "default": "./lib/portal/substrate/index.js",
-                "types": "./lib/portal/substrate/index.d.ts"
-            },
-            "require": {
-                "default": "./lib/portal/substrate/index.cjs",
-                "types": "./lib/portal/substrate/index.d.cts"
-            }
-        },
-        "./portal/substrate/query": {
-            "import": {
-                "default": "./lib/portal/substrate/query.js",
-                "types": "./lib/portal/substrate/query.d.ts"
-            },
-            "require": {
-                "default": "./lib/portal/substrate/query.cjs",
-                "types": "./lib/portal/substrate/query.d.cts"
             }
         }
     }

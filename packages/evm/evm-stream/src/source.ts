@@ -23,11 +23,8 @@ export function evmPortalDataSource<F extends FieldSelection>(options: EvmPortal
         cursor?: BlockRef,
         request?: EvmDataRequestRange[],
     ): AsyncIterableIterator<DataMessage<BlockRef, Block<F>>> {
-        const requestsBounded = cursor
-            ? applyRangeBound(request ? mergeRangeRequests([...requests, ...request], mergeDataRequests) : requests, {
-                  from: cursor.number + 1,
-              })
-            : requests
+        const mergedRequest = request ? mergeRangeRequests([...requests, ...request], mergeDataRequests) : requests
+        const requestsBounded = cursor ? applyRangeBound(mergedRequest, {from: cursor.number + 1}) : mergedRequest
 
         const fields = toPortalFieldSelection(options.fields)
 

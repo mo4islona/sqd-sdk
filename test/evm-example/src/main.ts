@@ -1,16 +1,34 @@
 import {In} from 'typeorm'
 import {PortalClient} from '@belopash/core/portal'
 import {HttpClient} from '@belopash/core/http-client'
-import {createStream, createTracker} from '@belopash/core/pipeline'
+import {
+    createStream,
+    createTracker,
+    createTransformer,
+    type BlockRef,
+    type DataDuplex,
+    type DataTargetFactoryOptions,
+} from '@belopash/core/pipeline'
 import {createTypeormTarget} from '@belopash/typeorm-target/database'
-import {evmPortalDataSource, EvmQueryBuilder} from '@belopash/evm-stream'
+import {
+    evmPortalDataSource,
+    EvmQueryBuilder,
+    type Block,
+    type EvmDataRequestRange,
+    type Log,
+} from '@belopash/evm-stream'
 import * as factoryAbi from './abi/factory'
 import * as poolAbi from './abi/pool'
 import {Pool, Swap} from './model'
 import type {Store as OrmStore} from '@belopash/typeorm-target'
 import {createLogger} from '@belopash/core/logger'
+import * as fs from 'node:fs'
+import * as path from 'node:path'
 
-let factoryPools: Set<string>
+export interface PoolIndexItem {
+    cursor: {number: number; hash: string}
+    value: {poolAddress: string}
+}
 
 export const FACTORY_ADDRESS = '0x1f98431c8ad98523631ae4a59f267346ea31f984'
 
@@ -23,23 +41,6 @@ let portal = new PortalClient({
 })
 
 async function main() {
-    let head = await portal.getHead().then((h) => h?.number ?? 0)
-
-    const evmQuery = new EvmQueryBuilder()
-        .addLog({
-            request: {
-                address: [FACTORY_ADDRESS],
-                topic0: [factoryAbi.events.PoolCreated.topic],
-            },
-        })
-        .addLog({
-            request: {
-                topic0: [poolAbi.events.Swap.topic],
-                transaction: true,
-            },
-        })
-        .build()
-
     await createStream(() =>
         evmPortalDataSource({
             portal,
@@ -55,27 +56,24 @@ async function main() {
                 },
                 transaction: {hash: true, transactionIndex: true},
             },
-            request: evmQuery,
+            request: [],
         }),
     )
+        .pipe(createFactoryFilter({address: FACTORY_ADDRESS}))
         .pipe(createProgressTracker('evm'))
         .pipe(
             createTypeormTarget({}, async (store, batch) => {
-                if (!factoryPools) {
-                    factoryPools = await store.findBy(Pool, {}).then((q) => new Set(q.map((i) => i.id)))
-                }
-
                 let pools: PoolData[] = []
                 let swaps: SwapEvent[] = []
 
                 for (let block of batch) {
-                    for (let log of block.logs) {
+                    for (let log of block.uniswapLogs) {
                         const address = log.address.toLowerCase()
                         const topic0 = log.topics[0]?.toLowerCase()
 
                         if (address === FACTORY_ADDRESS && topic0 === factoryAbi.events.PoolCreated.topic) {
                             pools.push(getPoolData(log))
-                        } else if (topic0 === poolAbi.events.Swap.topic && factoryPools.has(address)) {
+                        } else if (topic0 === poolAbi.events.Swap.topic) {
                             swaps.push(getSwap(block, log))
                         }
                     }
@@ -89,7 +87,154 @@ async function main() {
     console.log('end')
 }
 
-function createFactoryFilter() {}
+function createFactoryFilter<
+    TValue extends Block<{
+        log: {
+            address: true
+            topics: true
+            data: true
+        }
+    }>,
+>({
+    address,
+}: {address: string}): (
+    opts: DataTargetFactoryOptions,
+) => DataDuplex<BlockRef, TValue, EvmDataRequestRange[], BlockRef, TValue & {uniswapLogs: TValue['logs']}, never> {
+    function createQuery(pools: {cursor: BlockRef; value: {poolAddress: string}}[], end: BlockRef | undefined) {
+        const queryBuiler = new EvmQueryBuilder()
+
+        const limitedPools = pools.slice(0, 4876) // 200KB
+        queryBuiler.addLog({
+            range: {from: 0, to: end?.number},
+            request: {
+                topic0: [poolAbi.events.Swap.topic],
+                address: limitedPools.map((p) => p.value.poolAddress),
+            },
+        })
+        const wildcardCursor = limitedPools[limitedPools.length - 1].cursor ?? end
+        if (wildcardCursor) {
+            queryBuiler.addLog({
+                range: {from: wildcardCursor.number + 1},
+                request: {
+                    topic0: [poolAbi.events.Swap.topic],
+                },
+            })
+        }
+        return queryBuiler.build()
+    }
+
+    const factoryQuery = new EvmQueryBuilder()
+        .addLog({
+            request: {
+                address: [address],
+                topic0: [factoryAbi.events.PoolCreated.topic],
+            },
+        })
+        .build()
+
+    return createTransformer((opts) => {
+        const preindexedPools: {cursor: BlockRef; value: {poolAddress: string}}[] = []
+        let preindexedCursor: BlockRef | undefined = undefined
+        const dir = path.join(process.cwd(), 'assets')
+        const file = path.join(dir, 'pools.json')
+
+        try {
+            if (fs.existsSync(file)) {
+                const json = fs.readFileSync(file, 'utf8')
+                const parsed = JSON.parse(json)
+                if (parsed && Array.isArray(parsed.pools)) {
+                    preindexedPools.push(...parsed.pools)
+                    preindexedCursor = parsed.cursor
+                }
+            }
+        } catch {}
+
+        const savePools = () => {
+            fs.mkdirSync(dir, {recursive: true})
+            const out = {
+                cursor: preindexedCursor,
+                pools: preindexedPools,
+            }
+            fs.writeFileSync(file, JSON.stringify(out, null, 2))
+        }
+
+        return {
+            cursorUtils: opts.cursorUtils,
+            read: async function* (readOpts) {
+                console.log('preindexing starting...')
+                for await (let message of opts.read({
+                    cursor: preindexedCursor,
+                    request: factoryQuery,
+                })) {
+                    if (message.type === 'batch') {
+                        for (let item of message.data) {
+                            if (
+                                !message.finalizedHead ||
+                                opts.cursorUtils.compare(item.cursor, message.finalizedHead).isGreater
+                            ) {
+                                break
+                            }
+
+                            const block = item.value
+                            for (let log of block.logs) {
+                                if (
+                                    log.address.toLowerCase() === FACTORY_ADDRESS &&
+                                    factoryAbi.events.PoolCreated.is(log)
+                                ) {
+                                    const event = factoryAbi.events.PoolCreated.decode(log)
+                                    const poolAddress = event.pool.toLowerCase()
+                                    preindexedPools.push({cursor: item.cursor, value: {poolAddress}})
+                                    console.log('discovered pool', poolAddress)
+                                }
+                            }
+
+                            preindexedCursor = item.cursor
+                        }
+
+                        if (
+                            !message.finalizedHead ||
+                            opts.cursorUtils.compare(message.cursor, message.finalizedHead).isGreater
+                        ) {
+                            break
+                        }
+                    }
+                }
+                savePools()
+                console.log('preindex ended. known pools', preindexedPools.length)
+
+                const poolsQuery = createQuery(preindexedPools, preindexedCursor)
+                const poolsSet = new Set(preindexedPools.map((p) => p.value.poolAddress))
+
+                for await (let message of opts.read({
+                    cursor: readOpts.cursor,
+                    request: [...factoryQuery, ...poolsQuery],
+                })) {
+                    if (message.type === 'batch') {
+                        yield {
+                            type: 'batch',
+                            cursor: message.cursor,
+                            finalizedHead: message.finalizedHead,
+                            head: message.head,
+                            data: message.data.map((item) => {
+                                return {
+                                    cursor: item.cursor,
+                                    value: {
+                                        ...item.value,
+                                        uniswapLogs: item.value.logs.filter(
+                                            (l) => poolsSet.has(l.address) || l.address === address,
+                                        ),
+                                    },
+                                }
+                            }),
+                        }
+                    } else {
+                        yield message
+                    }
+                }
+            },
+        }
+    })
+}
 
 interface PoolData {
     id: string
@@ -117,7 +262,6 @@ async function createPools(store: {insert: (e: any) => Promise<unknown>}, poolsD
     for (let p of poolsData) {
         let pool = new Pool(p)
         pools.push(pool)
-        factoryPools.add(pool.id)
     }
 
     if (pools.length > 0) {
@@ -214,7 +358,7 @@ export function createProgressTracker<
     const writeTimer = createTimer()
     const logIntervalMs = 5_000
     const emitLog = () => {
-        if (!stats?.cursor) return
+        if (!stats?.cursor || !stats.head) return
         const now = Date.now()
         const headNumber = stats.head?.number ?? stats.cursor.number
         const finalizedNumber = stats.finalizedHead?.number

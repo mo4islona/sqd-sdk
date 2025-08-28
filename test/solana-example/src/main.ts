@@ -37,7 +37,7 @@ async function main() {
         })
         .build()
 
-    await createStream(() =>
+    await createStream(
         solanaPortalDataSource({
             portal,
             fields: {
@@ -127,7 +127,7 @@ async function main() {
 }
 
 export function createProgressTracker<
-    TCursor extends {number: number; hash: string; test: string},
+    TCursor extends {number: number; hash: string},
     TValue extends {header: {timestamp: number}},
     TRequest,
 >(prefix: string) {
