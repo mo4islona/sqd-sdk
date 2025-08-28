@@ -81,12 +81,12 @@ export class SolanaQueryBuilder<F extends Solana.FieldSelection = {block: {numbe
 export function mergeDataRequests(...requests: Solana.DataRequest[]): Solana.DataRequest {
     let res: Solana.DataRequest = {}
     for (let req of requests) {
-        res.transactions = concatRequestLists(res.transactions, req.transactions)
-        res.logs = concatRequestLists(res.logs, req.logs)
-        res.balances = concatRequestLists(res.balances, req.balances)
-        res.tokenBalances = concatRequestLists(res.tokenBalances, req.tokenBalances)
-        res.rewards = concatRequestLists(res.rewards, req.rewards)
-        res.instructions = concatRequestLists(res.instructions, req.instructions)
+        res.transactions = concaTQueryLists(res.transactions, req.transactions)
+        res.logs = concaTQueryLists(res.logs, req.logs)
+        res.balances = concaTQueryLists(res.balances, req.balances)
+        res.tokenBalances = concaTQueryLists(res.tokenBalances, req.tokenBalances)
+        res.rewards = concaTQueryLists(res.rewards, req.rewards)
+        res.instructions = concaTQueryLists(res.instructions, req.instructions)
         if (res.includeAllBlocks || req.includeAllBlocks) {
             res.includeAllBlocks = true
         }
@@ -98,7 +98,7 @@ export function mergeRequests(...requests: RangeRequest<Solana.DataRequest>[]): 
     return mergeRangeRequests(requests, mergeDataRequests)
 }
 
-function concatRequestLists<T extends object>(a?: T[], b?: T[]): T[] | undefined {
+function concaTQueryLists<T extends object>(a?: T[], b?: T[]): T[] | undefined {
     let result = [...(a || []), ...(b || [])]
     return result.length ? result : undefined
 }

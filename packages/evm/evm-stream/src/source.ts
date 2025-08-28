@@ -1,5 +1,5 @@
 import {applyRangeBound, mergeRangeRequests, type Range} from '@belopash/core/internal/range'
-import type {DataMessage, DataReadOptions} from '@belopash/core/pipeline'
+import type {DataMessage, DataReadRequest} from '@belopash/core/pipeline'
 import {createBlock, type Block, type FieldSelection} from './objects'
 import {mergeDataRequests, type EvmDataRequestRange} from './query'
 import {type PortalClient, type PortalClientOptions, portalDataSource} from '@belopash/core/portal'
@@ -9,22 +9,22 @@ import type * as EVM from '@belopash/core/portal/evm'
 export interface EvmPortalDataReaderOptions<F extends FieldSelection> {
     portal: PortalClientOptions | PortalClient
     fields: F
-    request: EvmDataRequestRange[]
+    query?: EvmDataRequestRange[]
     range?: Range
 }
 
 export function evmPortalDataSource<F extends FieldSelection>(options: EvmPortalDataReaderOptions<F>) {
-    let requests = mergeRangeRequests(options.request, mergeDataRequests)
+    let baseQuery = mergeRangeRequests(options.query ?? [], mergeDataRequests)
     if (options.range) {
-        requests = applyRangeBound(requests, options.range)
+        baseQuery = applyRangeBound(baseQuery, options.range)
     }
 
     const createBlockStream = async function* (
         cursor?: BlockRef,
-        request?: EvmDataRequestRange[],
+        query?: EvmDataRequestRange[],
     ): AsyncIterableIterator<DataMessage<BlockRef, Block<F>>> {
-        const mergedRequest = request ? mergeRangeRequests([...requests, ...request], mergeDataRequests) : requests
-        const requestsBounded = cursor ? applyRangeBound(mergedRequest, {from: cursor.number + 1}) : mergedRequest
+        const mergedQuery = query ? mergeRangeRequests([...baseQuery, ...query], mergeDataRequests) : baseQuery
+        const requestsBounded = cursor ? applyRangeBound(mergedQuery, {from: cursor.number + 1}) : mergedQuery
 
         const fields = toPortalFieldSelection(options.fields)
 
@@ -71,7 +71,7 @@ export function evmPortalDataSource<F extends FieldSelection>(options: EvmPortal
     return createSource({
         unfinalized: true,
         cursorUtils: BlockRefUtils,
-        read: (opts: DataReadOptions<BlockRef, EvmDataRequestRange[]>) => createBlockStream(opts.cursor, opts.request),
+        read: (opts: DataReadRequest<BlockRef, EvmDataRequestRange[]>) => createBlockStream(opts.cursor, opts.query),
     })
 }
 

@@ -17,8 +17,8 @@ export interface DataTrackerConfig<TCursor, TValue> {
     afterFork?: (message: DataForkMessage<TCursor>) => void | Promise<void>
 }
 
-export function createTracker<TCursor, TValue, TRequest>(config: DataTrackerConfig<TCursor, TValue>) {
-    return createTransformer<TCursor, TCursor, TValue, TValue, TRequest, TRequest>((opts) => ({
+export function createTracker<TCursor, TValue, TQuery>(config: DataTrackerConfig<TCursor, TValue>) {
+    return createTransformer<TCursor, TCursor, TValue, TValue, TQuery, TQuery>((opts) => ({
         cursorUtils: opts.cursorUtils,
         read: async function* (readOpts) {
             await config.beforeRead?.(readOpts.cursor)

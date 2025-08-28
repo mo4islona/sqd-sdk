@@ -56,7 +56,6 @@ async function main() {
                 },
                 transaction: {hash: true, transactionIndex: true},
             },
-            request: [],
         }),
     )
         .pipe(createFactoryFilter({address: FACTORY_ADDRESS}))
@@ -67,14 +66,14 @@ async function main() {
                 let swaps: SwapEvent[] = []
 
                 for (let block of batch) {
-                    for (let log of block.uniswapLogs) {
-                        const address = log.address.toLowerCase()
-                        const topic0 = log.topics[0]?.toLowerCase()
+                    for (let event of block.uniswap) {
+                        const address = event.log.address.toLowerCase()
+                        const topic0 = event.log.topics[0]?.toLowerCase()
 
                         if (address === FACTORY_ADDRESS && topic0 === factoryAbi.events.PoolCreated.topic) {
-                            pools.push(getPoolData(log))
+                            pools.push(getPoolData(event.log))
                         } else if (topic0 === poolAbi.events.Swap.topic) {
-                            swaps.push(getSwap(block, log))
+                            swaps.push(getSwap(block, event.log))
                         }
                     }
                 }
@@ -99,7 +98,14 @@ function createFactoryFilter<
     address,
 }: {address: string}): (
     opts: DataTargetFactoryOptions,
-) => DataDuplex<BlockRef, TValue, EvmDataRequestRange[], BlockRef, TValue & {uniswapLogs: TValue['logs']}, never> {
+) => DataDuplex<
+    BlockRef,
+    BlockRef,
+    TValue,
+    TValue & {uniswap: {data: any; log: TValue['logs'][number]}[]},
+    EvmDataRequestRange[],
+    never
+> {
     function createQuery(pools: {cursor: BlockRef; value: {poolAddress: string}}[], end: BlockRef | undefined) {
         const queryBuiler = new EvmQueryBuilder()
 
@@ -164,7 +170,7 @@ function createFactoryFilter<
                 console.log('preindexing starting...')
                 for await (let message of opts.read({
                     cursor: preindexedCursor,
-                    request: factoryQuery,
+                    query: factoryQuery,
                 })) {
                     if (message.type === 'batch') {
                         for (let item of message.data) {
@@ -207,7 +213,7 @@ function createFactoryFilter<
 
                 for await (let message of opts.read({
                     cursor: readOpts.cursor,
-                    request: [...factoryQuery, ...poolsQuery],
+                    query: [...factoryQuery, ...poolsQuery],
                 })) {
                     if (message.type === 'batch') {
                         yield {
@@ -220,9 +226,15 @@ function createFactoryFilter<
                                     cursor: item.cursor,
                                     value: {
                                         ...item.value,
-                                        uniswapLogs: item.value.logs.filter(
-                                            (l) => poolsSet.has(l.address) || l.address === address,
-                                        ),
+                                        uniswap: item.value.logs
+                                            .filter((l) => poolsSet.has(l.address) || l.address === address)
+                                            .map((l) => ({
+                                                data:
+                                                    l.address === address
+                                                        ? factoryAbi.events.PoolCreated.decode(l)
+                                                        : poolAbi.events.Swap.decode(l),
+                                                log: l,
+                                            })),
                                     },
                                 }
                             }),
@@ -351,7 +363,7 @@ function toEntityMap<E extends {id: string}>(entities: E[]): Map<string, E> {
 export function createProgressTracker<
     TCursor extends {number: number; hash: string},
     TValue extends {header: {timestamp: number}},
-    TRequest,
+    TQuery,
 >(prefix: string) {
     const logger = createLogger(`sqd:${prefix}`)
     const readTimer = createTimer()
@@ -420,7 +432,7 @@ export function createProgressTracker<
           }
         | undefined = undefined
 
-    return createTracker<TCursor, TValue, TRequest>({
+    return createTracker<TCursor, TValue, TQuery>({
         beforeRead: (cursor) => {
             if (!stats && cursor) {
                 logger.info(`continue from ${cursor.number}`)

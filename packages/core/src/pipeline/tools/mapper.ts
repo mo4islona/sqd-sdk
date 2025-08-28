@@ -1,13 +1,13 @@
-import type {DataDuplex, DataReadOptions, DataTargetFactoryOptions} from '../core'
+import type {DataDuplex, DataReadRequest, DataTargetFactoryOptions} from '../core'
 import {createTransformer} from './transformer'
 
-export function createMapper<TCursor, TInValue, TOutValue, TRequest>(
+export function createMapper<TCursor, TInValue, TOutValue, TQuery>(
     mapper: (input: TInValue) => TOutValue,
-): (opts: DataTargetFactoryOptions) => DataDuplex<TCursor, TCursor, TInValue, TOutValue, TRequest, TRequest> {
-    return createTransformer<TCursor, TCursor, TInValue, TOutValue, TRequest, TRequest>((opts) => {
+): (opts: DataTargetFactoryOptions) => DataDuplex<TCursor, TCursor, TInValue, TOutValue, TQuery, TQuery> {
+    return createTransformer<TCursor, TCursor, TInValue, TOutValue, TQuery, TQuery>((opts) => {
         return {
             cursorUtils: opts.cursorUtils,
-            read: async function* (readOpts: DataReadOptions<TCursor, TRequest>) {
+            read: async function* (readOpts: DataReadRequest<TCursor, TQuery>) {
                 for await (const message of opts.read(readOpts)) {
                     switch (message.type) {
                         case 'batch':

@@ -37,6 +37,7 @@ export default defineConfig([
                     sourceMap: true,
                     importHelpers: true,
                 },
+                noEmitOnError: true,
             }),
         ],
     }

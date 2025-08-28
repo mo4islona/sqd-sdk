@@ -10,6 +10,7 @@ import {
     type DataDuplex,
 } from '../core'
 import {maybeLast} from '../../internal/misc'
+import {createTransformer} from './transformer'
 
 interface BatchProcessingResult<TCursor, TValue> {
     buffer: DataBatchItem<TCursor, TValue>[]
@@ -158,56 +159,54 @@ function handleFork<TCursor, TValue>({
     }
 }
 
-export function createFinalizer<TCursor, TValue, TRequest>(): DataDuplex<
+export function createFinalizer<TCursor, TValue, TQuery>(): DataDuplex<
     TCursor,
     TCursor,
     TValue,
     TValue,
-    TRequest,
-    TRequest
+    TQuery,
+    TQuery
 > {
-    return createTarget<TCursor, TValue, TRequest, DataStream<TCursor, TValue, TRequest>>({
-        unfinalized: true,
-        write: (writeOptions) =>
-            createStream(
-                createSource({
-                    unfinalized: false,
-                    cursorUtils: writeOptions.cursorUtils,
-                    read: async function* (DataReadOptions) {
-                        let finalizedCursor: TCursor | undefined
-                        let buffer: DataBatchItem<TCursor, TValue>[] = []
+    return createTransformer<TCursor, TCursor, TValue, TValue, TQuery, TQuery>({
+        transform: (writeOptions) => {
+            return {
+                unfinalized: false,
+                cursorUtils: writeOptions.cursorUtils,
+                read: async function* (DataReadRequest) {
+                    let finalizedCursor: TCursor | undefined
+                    let buffer: DataBatchItem<TCursor, TValue>[] = []
 
-                        for await (const message of writeOptions.read(DataReadOptions)) {
-                            switch (message.type) {
-                                case 'batch': {
-                                    const result = handleBatch({
-                                        batch: message,
-                                        buffer,
-                                        cursorUtils: writeOptions.cursorUtils,
-                                        finalizedId: finalizedCursor,
-                                    })
-                                    buffer = result.buffer
-                                    finalizedCursor = result.batch?.cursor
+                    for await (const message of writeOptions.read(DataReadRequest)) {
+                        switch (message.type) {
+                            case 'batch': {
+                                const result = handleBatch({
+                                    batch: message,
+                                    buffer,
+                                    cursorUtils: writeOptions.cursorUtils,
+                                    finalizedId: finalizedCursor,
+                                })
+                                buffer = result.buffer
+                                finalizedCursor = result.batch?.cursor
 
-                                    if (result.batch) {
-                                        yield result.batch
-                                    }
-                                    break
+                                if (result.batch) {
+                                    yield result.batch
                                 }
-                                case 'fork': {
-                                    const result = handleFork({
-                                        fork: message,
-                                        buffer,
-                                        finalizedId: finalizedCursor,
-                                        cursorUtils: writeOptions.cursorUtils,
-                                    })
-                                    buffer = result.buffer
-                                    break
-                                }
+                                break
+                            }
+                            case 'fork': {
+                                const result = handleFork({
+                                    fork: message,
+                                    buffer,
+                                    finalizedId: finalizedCursor,
+                                    cursorUtils: writeOptions.cursorUtils,
+                                })
+                                buffer = result.buffer
+                                break
                             }
                         }
-                    },
-                }),
-            ),
+                    }
+                },
+            }
+        },
     })
 }

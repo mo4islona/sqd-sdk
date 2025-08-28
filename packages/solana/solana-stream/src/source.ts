@@ -1,5 +1,11 @@
 import {applyRangeBound, mergeRangeRequests, type Range} from '@belopash/core/internal/range'
-import {BlockRefUtils, createSource, type DataReadOptions, type BlockRef, type DataMessage} from '@belopash/core/pipeline'
+import {
+    BlockRefUtils,
+    createSource,
+    type DataReadRequest,
+    type BlockRef,
+    type DataMessage,
+} from '@belopash/core/pipeline'
 import {createBlock, type Block, type FieldSelection, type RequiredFieldSelection} from './objects'
 import {mergeDataRequests, type SolanaDataRequestRange} from './query'
 import {type PortalClient, type PortalClientOptions, portalDataSource} from '@belopash/core/portal'
@@ -8,25 +14,25 @@ import type * as solana from '@belopash/core/portal/solana/query'
 export interface SolanaPortalDataReaderOptions<F extends FieldSelection> {
     portal: PortalClientOptions | PortalClient
     fields: F
-    request: SolanaDataRequestRange[]
+    query?: SolanaDataRequestRange[]
     range?: Range
 }
 
 export function solanaPortalDataSource<F extends FieldSelection>(options: SolanaPortalDataReaderOptions<F>) {
-    let requests = mergeRangeRequests(options.request, mergeDataRequests)
+    let baseQuery = mergeRangeRequests(options.query ?? [], mergeDataRequests)
     if (options.range) {
-        requests = applyRangeBound(requests, options.range)
+        baseQuery = applyRangeBound(baseQuery, options.range)
     }
 
     const createBlockStream = async function* (
         cursor?: BlockRef,
-        request?: SolanaDataRequestRange[],
+        query?: SolanaDataRequestRange[],
     ): AsyncIterableIterator<DataMessage<BlockRef, Block<F>>> {
         const requestsBounded = cursor
-            ? applyRangeBound(request ? mergeRangeRequests([...requests, ...request], mergeDataRequests) : requests, {
+            ? applyRangeBound(query ? mergeRangeRequests([...baseQuery, ...query], mergeDataRequests) : baseQuery, {
                   from: cursor.number + 1,
               })
-            : requests
+            : baseQuery
 
         const fields = toPortalFieldSelection(options.fields)
 
@@ -73,7 +79,7 @@ export function solanaPortalDataSource<F extends FieldSelection>(options: Solana
     return createSource({
         unfinalized: true,
         cursorUtils: BlockRefUtils,
-        read: (opts: DataReadOptions<BlockRef, SolanaDataRequestRange[]>) => createBlockStream(opts.cursor, opts.request),
+        read: (opts: DataReadRequest<BlockRef, SolanaDataRequestRange[]>) => createBlockStream(opts.cursor, opts.query),
     })
 }
 

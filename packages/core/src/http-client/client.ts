@@ -323,7 +323,7 @@ export class HttpClient implements BaseHttpClient {
         return arrayBuffer
     }
 
-    private getRequestUrlAndAuth(url: string): {url: string; basic?: string} {
+    private geTQueryUrlAndAuth(url: string): {url: string; basic?: string} {
         let u = new URL(this.getAbsUrl(url))
         if (u.username || u.password) {
             let basic = btoa(`${u.username}:${u.password}`)

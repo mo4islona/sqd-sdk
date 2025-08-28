@@ -19,7 +19,7 @@ export interface RangeRequest<R> {
     request: R
 }
 
-export interface SplitRequest<R> {
+export interface SpliTQuery<R> {
     range: FiniteRange
     request: R
 }

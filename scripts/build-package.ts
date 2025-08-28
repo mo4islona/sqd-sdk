@@ -156,7 +156,7 @@ async function processCodeFiles(files: string[], ext: string, pkgDir: string): P
                 visit(code, createImportVisitor(file, ext, pkgDir))
                 await fs.writeFile(file, print(code).code)
             } catch (error) {
-                console.error(`Error processing file ${file}:`, error)
+                console.error(`❌ Error processing file ${file}`)
                 throw error
             }
         }),
@@ -304,7 +304,7 @@ async function processDtsFiles(dtsFiles: string[], pkgDir: string): Promise<void
 
                 await fs.writeFile(file, content)
             } catch (error) {
-                console.error(`Error processing .d.ts file ${file}:`, error)
+                console.error(`❌ Error processing .d.ts file ${file}`)
                 throw error
             }
         }),
@@ -361,7 +361,7 @@ async function createDtsStubs(dtsFiles: string[]): Promise<void> {
 
                 await fs.writeFile(ctsPath, lines.join('\n'))
             } catch (error) {
-                console.error(`Error creating .d.cts stub for ${file}:`, error)
+                console.error(`❌ Error creating .d.cts stub for ${file}`)
                 throw error
             }
         }),
@@ -382,7 +382,7 @@ async function cleanupTypeExports(dctsFiles: string[]): Promise<void> {
                     await fs.writeFile(file, cleaned)
                 }
             } catch (error) {
-                console.error(`Error cleaning up type exports in ${file}:`, error)
+                console.error(`❌ Error cleaning up type exports in ${file}`)
                 throw error
             }
         }),
@@ -433,7 +433,12 @@ async function buildPackage(pkgDir: string): Promise<void> {
 
         // Clean and build
         await fs.remove(path.join(pkgDir, 'lib.new'))
-        await $`rollup -c ${path.join(pkgDir, 'rollup.config.js')}`.stdio('pipe', 'pipe', 'pipe')
+        try {
+            await $`rollup -c ${path.join(pkgDir, 'rollup.config.js')}`
+        } catch (error) {
+            console.error('❌ Rollup build failed')
+            throw new Error('Build failed')
+        }
 
         // Get all file globs in one batch
         const fileGlobs = await getAllFiles(pkgDir)
@@ -457,10 +462,16 @@ async function buildPackage(pkgDir: string): Promise<void> {
         await fs.remove(path.join(pkgDir, 'lib'))
         await fs.rename(path.join(pkgDir, 'lib.new'), path.join(pkgDir, 'lib'))
     } catch (error) {
-        console.error(`Build failed for package in ${pkgDir}:`, error)
+        console.error(`❌ Build failed for package in ${pkgDir}`)
         throw error
     }
 }
 
 const pkgDir = process.cwd()
-await buildPackage(pkgDir)
+
+try {
+    await buildPackage(pkgDir)
+    console.log(`✅ Successfully built package in ${pkgDir}`)
+} catch (error) {
+    process.exit(1)
+}

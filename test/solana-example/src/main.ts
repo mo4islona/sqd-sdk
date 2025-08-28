@@ -61,7 +61,7 @@ async function main() {
                     postAmount: true,
                 },
             },
-            request: whirlpoolQuery,
+            query: whirlpoolQuery,
         }),
     )
         //.pipe(createFinalizer())
@@ -129,7 +129,7 @@ async function main() {
 export function createProgressTracker<
     TCursor extends {number: number; hash: string},
     TValue extends {header: {timestamp: number}},
-    TRequest,
+    TQuery,
 >(prefix: string) {
     const logger = createLogger(`sqd:${prefix}`)
     const readTimer = createTimer()
@@ -198,7 +198,7 @@ export function createProgressTracker<
           }
         | undefined = undefined
 
-    return createTracker<TCursor, TValue, TRequest>({
+    return createTracker<TCursor, TValue, TQuery>({
         beforeRead: (cursor) => {
             if (!stats && cursor) {
                 logger.info(`continue from ${cursor.number}`)

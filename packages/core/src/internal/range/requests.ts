@@ -11,7 +11,7 @@ export function getRangeAt<R extends RangeRequest<any>>(ranges: R[], height: num
     return undefined
 }
 
-export function getRequestAt<R>(requests: RangeRequest<R>[], height: number): R | undefined {
+export function geTQueryAt<R>(requests: RangeRequest<R>[], height: number): R | undefined {
     return getRangeAt(requests, height)?.request
 }
 
@@ -31,7 +31,7 @@ export function* splitBlocksByRequest<R, B>(
     blocks: B[]
     request?: R
 }> {
-    for (let pack of partitionBy(blocks, (b) => getRequestAt(requests, getBlockHeight(b)))) {
+    for (let pack of partitionBy(blocks, (b) => geTQueryAt(requests, getBlockHeight(b)))) {
         yield {
             blocks: pack.items,
             request: pack.value,

@@ -155,7 +155,7 @@ export type EventRelations = {
     stack?: boolean
 }
 
-export type EventRequest = Simplify<
+export type EvenTQuery = Simplify<
     {
         name?: QualifiedName[]
     } & EventRelations
@@ -181,23 +181,23 @@ export type EthereumLogRequest = Simplify<
     } & EventRelations
 >
 
-export type EthereumTransactRequest = Simplify<{to?: Hex[]; sighash?: Hex[]} & CallRelations>
+export type EthereumTransacTQuery = Simplify<{to?: Hex[]; sighash?: Hex[]} & CallRelations>
 
 export type ContractsContractEmittedRequest = Simplify<{address?: Hex[]} & EventRelations>
 
 export type GearMessageQueuedRequest = Simplify<{programId?: Hex[]} & EventRelations>
 
-export type GearUserMessageSentRequest = Simplify<{programId?: Hex[]} & EventRelations>
+export type GearUserMessageSenTQuery = Simplify<{programId?: Hex[]} & EventRelations>
 
 export type DataRequest = {
     includeAllBlocks?: boolean
-    events?: EventRequest[]
+    events?: EvenTQuery[]
     calls?: CallRequest[]
     evmLogs?: EvmLogRequest[]
-    ethereumTransactions?: EthereumTransactRequest[]
+    ethereumTransactions?: EthereumTransacTQuery[]
     contractsEvents?: ContractsContractEmittedRequest[]
     gearMessagesQueued?: GearMessageQueuedRequest[]
-    gearUserMessagesSent?: GearUserMessageSentRequest[]
+    gearUserMessagesSent?: GearUserMessageSenTQuery[]
 }
 
 export type Query<F extends FieldSelection = FieldSelection> = Simplify<

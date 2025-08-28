@@ -68,10 +68,10 @@ export class EvmQueryBuilder<F extends EVM.FieldSelection = {block: {number: tru
 export function mergeDataRequests(...requests: EVM.DataRequest[]): EVM.DataRequest {
     let res: EVM.DataRequest = {}
     for (let req of requests) {
-        res.transactions = concatRequestLists(res.transactions, req.transactions)
-        res.logs = concatRequestLists(res.logs, req.logs)
-        res.traces = concatRequestLists(res.traces, req.traces)
-        res.stateDiffs = concatRequestLists(res.stateDiffs, req.stateDiffs)
+        res.transactions = concaTQueryLists(res.transactions, req.transactions)
+        res.logs = concaTQueryLists(res.logs, req.logs)
+        res.traces = concaTQueryLists(res.traces, req.traces)
+        res.stateDiffs = concaTQueryLists(res.stateDiffs, req.stateDiffs)
         if (res.includeAllBlocks || req.includeAllBlocks) {
             res.includeAllBlocks = true
         }
@@ -83,7 +83,7 @@ export function mergeRequests(...requests: RangeRequest<EVM.DataRequest>[]): Ran
     return mergeRangeRequests(requests, mergeDataRequests)
 }
 
-function concatRequestLists<T extends object>(a?: T[], b?: T[]): T[] | undefined {
+function concaTQueryLists<T extends object>(a?: T[], b?: T[]): T[] | undefined {
     let result = [...(a || []), ...(b || [])]
     return result.length ? result : undefined
 }

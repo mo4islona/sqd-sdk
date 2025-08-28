@@ -53,13 +53,13 @@ export type DataMessage<TCursor, TValue> = DataBatchMessage<TCursor, TValue> | D
  * downstream data stream components upwards (from a data target to a data source)
  *
  * @template TCursor - The cursor type that represents a position in the data stream (e.g. block number + hash)
- * @template TRequest - The type of request parameters for the data source
+ * @template TQuery - The type of request parameters for the data source
  */
-export interface DataReadOptions<TCursor, TRequest> {
+export interface DataReadRequest<TCursor, TQuery> {
     /** The cursor position to start reading from (optional) */
-    cursor?: TCursor
+    cursor: TCursor | undefined
     /** Additional request parameters for the data source (optional) */
-    request?: TRequest
+    query?: TQuery
 }
 
 /**
@@ -69,9 +69,9 @@ export interface DataReadOptions<TCursor, TRequest> {
  *
  * @template TCursor - The cursor type that represents a position in the data stream (e.g. block number + hash)
  * @template TValue - The type of data values produced by this source
- * @template TRequest - The type of additional request parameters accepted by this source
+ * @template TQuery - The type of additional request parameters accepted by this source
  */
-export interface DataSource<TCursor, TValue, TRequest> {
+export interface DataSource<TCursor, TValue, TQuery> {
     /** Whether this source can produce unfinalized data that may change due to forks (arising e.g. due to a reorg in the blockchain) */
     unfinalized: boolean
     /** Necessary utilities for comparing and manipulating cursor values */
@@ -81,7 +81,7 @@ export interface DataSource<TCursor, TValue, TRequest> {
      * and honoring the additional request parameters.
      * Returns an async iterable of data messages (data batches or forks).
      */
-    read(options: DataReadOptions<TCursor, TRequest>): AsyncIterable<DataMessage<TCursor, TValue>>
+    read(options: DataReadRequest<TCursor, TQuery>): AsyncIterable<DataMessage<TCursor, TValue>>
 }
 
 /**
@@ -90,16 +90,16 @@ export interface DataSource<TCursor, TValue, TRequest> {
  *
  * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
  * @template TValue - The type of data values
- * @template TRequest - The type of additional request parameters for the data source that passes the context
+ * @template TQuery - The type of additional request parameters for the data source that passes the context
  */
-export interface DataWriteOptions<TCursor, TValue, TRequest> {
+export interface DataWriteContext<TCursor, TValue, TQuery> {
     /** Necessary utilities for comparing and manipulating cursor values */
     cursorUtils: DataCursorUtils<TCursor>
     /**
      * Function to read data from the source stream that passes the context.
      * Returns an async iterable of data messages (data batches or forks).
      */
-    read(options: DataReadOptions<TCursor, TRequest>): AsyncIterable<DataMessage<TCursor, TValue>>
+    read(options: DataReadRequest<TCursor, TQuery>): AsyncIterable<DataMessage<TCursor, TValue>>
 }
 
 /**
@@ -109,14 +109,14 @@ export interface DataWriteOptions<TCursor, TValue, TRequest> {
  *
  * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
  * @template TValue - The type of the consumed data values
- * @template TRequest - The type of additional request parameters to be passed back to the data source
+ * @template TQuery - The type of additional request parameters to be passed back to the data source
  * @template TReturn - The return type of the write operation
  */
-export interface DataTarget<TCursor, TValue, TRequest, TReturn> {
+export interface DataTarget<TCursor, TValue, TQuery, TReturn> {
     /** Whether this target can handle unfinalized data that may change due to forks (arising e.g. due to a reorg in the blockchain) */
     unfinalized: boolean
     /** Writes data obtained from the provided context */
-    write(context: DataWriteOptions<TCursor, TValue, TRequest>): TReturn
+    write(context: DataWriteContext<TCursor, TValue, TQuery>): TReturn
 }
 
 /**
@@ -137,9 +137,9 @@ export interface DataPipeOptions {
  *
  * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
  * @template TValue - The type of data values produced by this source
- * @template TRequest - The type of additional request parameters accepted by this source
+ * @template TQuery - The type of additional request parameters accepted by this source
  */
-export interface DataSourceConfig<TCursor, TValue, TRequest> {
+export interface DataSourceConfig<TCursor, TValue, TQuery> {
     /** Whether this source can produce unfinalized data */
     unfinalized?: boolean
     /** Necessary utilities for comparing and manipulating cursor values */
@@ -148,7 +148,7 @@ export interface DataSourceConfig<TCursor, TValue, TRequest> {
      * Function to read data from the source.
      * Returns an async iterable of data messages (data batches or forks).
      */
-    read(options: DataReadOptions<TCursor, TRequest>): AsyncIterable<DataMessage<TCursor, TValue>>
+    read(options: DataReadRequest<TCursor, TQuery>): AsyncIterable<DataMessage<TCursor, TValue>>
 }
 
 /**
@@ -156,13 +156,13 @@ export interface DataSourceConfig<TCursor, TValue, TRequest> {
  *
  * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
  * @template TValue - The type of data values produced by this source
- * @template TRequest - The type of additional request parameters accepted by this source at runtime
+ * @template TQuery - The type of additional request parameters accepted by this source at runtime
  * @param source - Configuration object defining the data source behavior
  * @returns A configured DataSource instance
  */
-export function createSource<TCursor, TValue, TRequest>(
-    source: DataSourceConfig<TCursor, TValue, TRequest>,
-): DataSource<TCursor, TValue, TRequest> {
+export function createSource<TCursor, TValue, TQuery>(
+    source: DataSourceConfig<TCursor, TValue, TQuery>,
+): DataSource<TCursor, TValue, TQuery> {
     return {
         unfinalized: source.unfinalized ?? true,
         cursorUtils: source.cursorUtils,
@@ -175,16 +175,16 @@ export function createSource<TCursor, TValue, TRequest>(
  *
  * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
  * @template TValue - The type of data values consumed by this target
- * @template TRequest - The type of additional request parameters to be passed back to the data source
+ * @template TQuery - The type of additional request parameters to be passed back to the data source
  * @template TReturn - The return type of the write operation
  */
-export interface DataTargetConfig<TCursor, TValue, TRequest, TReturn> {
+export interface DataTargetConfig<TCursor, TValue, TQuery, TReturn> {
     /** Whether this target can handle unfinalized data */
     unfinalized?: boolean
     /**
      * Function to write data obtained from the provided context.
      */
-    write(context: DataWriteOptions<TCursor, TValue, TRequest>): TReturn
+    write(context: DataWriteContext<TCursor, TValue, TQuery>): TReturn
 }
 
 /**
@@ -192,34 +192,34 @@ export interface DataTargetConfig<TCursor, TValue, TRequest, TReturn> {
  *
  * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
  * @template TValue - The type of data values consumed by this target
- * @template TRequest - The type of additional request parameters to be passed back to the data source
+ * @template TQuery - The type of additional request parameters to be passed back to the data source
  * @template TReturn - The return type of the write operation
  * @param config - Configuration object defining the data target behavior
  * @returns A configured DataTarget instance
  */
-export function createTarget<TCursor, TValue, TRequest, TReturn>(
-    config: DataTargetConfig<TCursor, TValue, TRequest, TReturn>,
-): DataTarget<TCursor, TValue, TRequest, TReturn>
+export function createTarget<TCursor, TValue, TQuery, TReturn>(
+    config: DataTargetConfig<TCursor, TValue, TQuery, TReturn>,
+): DataTarget<TCursor, TValue, TQuery, TReturn>
 /**
  * Creates a data target factory from a factory function.
  *
  * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
  * @template TValue - The type of data values consumed by this target
- * @template TRequest - The type of additional request parameters to be passed back to the data source
+ * @template TQuery - The type of additional request parameters to be passed back to the data source
  * @template TReturn - The return type of the write operation
  * @param factory - Factory function that creates a target configuration based on options
  * @returns A configured DataTarget instance
  */
-export function createTarget<TCursor, TValue, TRequest, TReturn>(
-    factory: (opts: DataTargetFactoryOptions) => DataTargetConfig<TCursor, TValue, TRequest, TReturn>,
-): (opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TRequest, TReturn>
-export function createTarget<TCursor, TValue, TRequest, TReturn>(
+export function createTarget<TCursor, TValue, TQuery, TReturn>(
+    factory: (opts: DataTargetFactoryOptions) => DataTargetConfig<TCursor, TValue, TQuery, TReturn>,
+): (opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TQuery, TReturn>
+export function createTarget<TCursor, TValue, TQuery, TReturn>(
     configOrFactory:
-        | DataTargetConfig<TCursor, TValue, TRequest, TReturn>
-        | ((opts: DataTargetFactoryOptions) => DataTargetConfig<TCursor, TValue, TRequest, TReturn>),
+        | DataTargetConfig<TCursor, TValue, TQuery, TReturn>
+        | ((opts: DataTargetFactoryOptions) => DataTargetConfig<TCursor, TValue, TQuery, TReturn>),
 ):
-    | DataTarget<TCursor, TValue, TRequest, TReturn>
-    | ((opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TRequest, TReturn>) {
+    | DataTarget<TCursor, TValue, TQuery, TReturn>
+    | ((opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TQuery, TReturn>) {
     if (typeof configOrFactory === 'function') {
         return (opts: DataTargetFactoryOptions) => createTarget(configOrFactory(opts))
     }
@@ -236,13 +236,17 @@ export function createTarget<TCursor, TValue, TRequest, TReturn>(
  *
  * @template TInputCursor - The cursor type (e.g. block height + hash) for the source data
  * @template TInputValue - The type of source data values
- * @template TInputRequest - The type of additional request parameters to be passed to the source
+ * @template TInpuTQuery - The type of additional request parameters to be passed to the source
  * @template TOutputCursor - The cursor type for the target data
  * @template TOutputValue - The type of data values to be written to the target
- * @template TOutputRequest - The type of additional request parameters passed in by the target
+ * @template TOutpuTQuery - The type of additional request parameters passed in by the target
  */
-export type DataDuplex<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInputRequest, TOutputRequest> =
-    DataTarget<TInputCursor, TInputValue, TInputRequest, DataStream<TOutputCursor, TOutputValue, TOutputRequest>>
+export type DataDuplex<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery> = DataTarget<
+    TInputCursor,
+    TInputValue,
+    TInpuTQuery,
+    DataStream<TOutputCursor, TOutputValue, TOutpuTQuery>
+>
 
 /**
  * Represents a data stream that can be piped to targets or iterated over directly.
@@ -250,9 +254,9 @@ export type DataDuplex<TInputCursor, TOutputCursor, TInputValue, TOutputValue, T
  *
  * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
  * @template TValue - The type of data values in the stream
- * @template TRequest - The type of additional request parameters that can be passed to the data source
+ * @template TQuery - The type of additional request parameters that can be passed to the data source
  */
-export interface DataStream<TCursor, TValue, TRequest> {
+export interface DataStream<TCursor, TValue, TQuery> {
     /**
      * Pipes this stream to a target, creating a data processing pipeline.
      *
@@ -263,8 +267,8 @@ export interface DataStream<TCursor, TValue, TRequest> {
      */
     pipe<TReturn>(
         targetOrFactory:
-            | DataTarget<TCursor, TValue, TRequest, TReturn>
-            | ((opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TRequest, TReturn>),
+            | DataTarget<TCursor, TValue, TQuery, TReturn>
+            | ((opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TQuery, TReturn>),
         opts?: DataPipeOptions,
     ): TReturn
 
@@ -274,7 +278,7 @@ export interface DataStream<TCursor, TValue, TRequest> {
      * @param opts - Optional read options for controlling the iteration
      * @returns An async iterable of data values
      */
-    [Symbol.asyncIterator](opts?: DataReadOptions<TCursor, TRequest>): AsyncIterable<TValue>
+    [Symbol.asyncIterator](opts?: DataReadRequest<TCursor, TQuery>): AsyncIterable<TValue>
 }
 
 /**
@@ -282,13 +286,13 @@ export interface DataStream<TCursor, TValue, TRequest> {
  *
  * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
  * @template TValue - The type of data values in the stream
- * @template TRequest - The type of additional request parameters that can be passed to the data source
+ * @template TQuery - The type of additional request parameters that can be passed to the data source
  * @param sourceOrFactory - The data source or a factory function that creates a data source
  * @returns A DataStream instance that can be piped to targets or iterated over
  */
-export function createStream<TCursor, TValue, TRequest>(
-    sourceOrFactory: DataSource<TCursor, TValue, TRequest> | (() => DataSource<TCursor, TValue, TRequest>),
-): DataStream<TCursor, TValue, TRequest> {
+export function createStream<TCursor, TValue, TQuery>(
+    sourceOrFactory: DataSource<TCursor, TValue, TQuery> | (() => DataSource<TCursor, TValue, TQuery>),
+): DataStream<TCursor, TValue, TQuery> {
     const source = typeof sourceOrFactory === 'function' ? sourceOrFactory() : sourceOrFactory
 
     return {
@@ -300,14 +304,14 @@ export function createStream<TCursor, TValue, TRequest>(
 
             return pipe(source, target, opts)
         },
-        [Symbol.asyncIterator]: (opts?: DataReadOptions<TCursor, TRequest>): AsyncIterable<TValue> => {
+        [Symbol.asyncIterator]: (opts?: DataReadRequest<TCursor, TQuery>): AsyncIterable<TValue> => {
             return pipe(
                 source,
                 {
                     unfinalized: source.unfinalized,
-                    write: async function* (streamOpts: DataWriteOptions<TCursor, TValue, TRequest>) {
+                    write: async function* (streamOpts: DataWriteContext<TCursor, TValue, TQuery>) {
                         for await (const message of streamOpts.read(
-                            (opts ?? {cursor: undefined, request: undefined}) as DataReadOptions<TCursor, TRequest>,
+                            (opts ?? {cursor: undefined, request: undefined}) as DataReadRequest<TCursor, TQuery>,
                         )) {
                             switch (message.type) {
                                 case 'batch':
@@ -327,9 +331,9 @@ export function createStream<TCursor, TValue, TRequest>(
     }
 }
 
-function pipe<TCursor, TValue, TRequest, TReturn>(
-    source: DataSource<TCursor, TValue, TRequest>,
-    target: DataTarget<TCursor, TValue, TRequest, TReturn>,
+function pipe<TCursor, TValue, TQuery, TReturn>(
+    source: DataSource<TCursor, TValue, TQuery>,
+    target: DataTarget<TCursor, TValue, TQuery, TReturn>,
     opts: DataPipeOptions,
 ): TReturn {
     if (source.unfinalized && !target.unfinalized) {
@@ -339,7 +343,7 @@ function pipe<TCursor, TValue, TRequest, TReturn>(
     return target.write({
         cursorUtils: source.cursorUtils,
         read: async function* (
-            streamOpts: DataReadOptions<TCursor, TRequest>,
+            streamOpts: DataReadRequest<TCursor, TQuery>,
         ): AsyncIterable<DataMessage<TCursor, TValue>> {
             let offset = streamOpts.cursor
 

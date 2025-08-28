@@ -6,7 +6,7 @@
 //     type DataSource,
 //     type DataTarget,
 //     type DataTargetFactoryOptions,
-//     type DataReadOptions,
+//     type DataReadRequest,
 //     type Stream,
 // } from './core'
 import {DataCursor, type DataCursorUtils} from './cursor'
@@ -28,19 +28,19 @@ export const BlockRefUtils = {
     deserialize: (ref: BlockRef) => ref,
 }
 
-// export type BlockSource<TValue, TRequest> = DataSource<BlockRef, TValue, TRequest>
+// export type BlockSource<TValue, TQuery> = DataSource<BlockRef, TValue, TQuery>
 
-// export type BlockSourceFactory<TValue, TRequest> = () => BlockSource<TValue, TRequest>
+// export type BlockSourceFactory<TValue, TQuery> = () => BlockSource<TValue, TQuery>
 
-// export function createBlockSource<TValue, TRequest>(
+// export function createBlockSource<TValue, TQuery>(
 //     source:
-//         | Omit<BlockSource<TValue, TRequest>, 'cursorUtils'>
-//         | (() => Omit<BlockSource<TValue, TRequest>, 'cursorUtils'>),
-// ): BlockSourceFactory<TValue, TRequest> {
+//         | Omit<BlockSource<TValue, TQuery>, 'cursorUtils'>
+//         | (() => Omit<BlockSource<TValue, TQuery>, 'cursorUtils'>),
+// ): BlockSourceFactory<TValue, TQuery> {
 //     return () => {
 //         const s =
 //             typeof source === 'function'
-//                 ? (source as () => Omit<BlockSource<TValue, TRequest>, 'cursorUtils'>)()
+//                 ? (source as () => Omit<BlockSource<TValue, TQuery>, 'cursorUtils'>)()
 //                 : source
 //         return createSource({
 //             ...s,
@@ -49,47 +49,47 @@ export const BlockRefUtils = {
 //     }
 // }
 
-// export type BlockTarget<TValue, TRequest, TResult> = DataTarget<BlockRef, TValue, TRequest, TResult>
+// export type BlockTarget<TValue, TQuery, TResult> = DataTarget<BlockRef, TValue, TQuery, TResult>
 
-// export type BlockTargetFactory<TValue, TRequest, TResult> = (
+// export type BlockTargetFactory<TValue, TQuery, TResult> = (
 //     opts: DataTargetFactoryOptions,
-// ) => BlockTarget<TValue, TRequest, TResult>
+// ) => BlockTarget<TValue, TQuery, TResult>
 
-// export function createBlockTarget<TValue, TRequest, TResult>(
-//     target: BlockTarget<TValue, TRequest, TResult> | BlockTargetFactory<TValue, TRequest, TResult>,
-// ): BlockTargetFactory<TValue, TRequest, TResult> {
+// export function createBlockTarget<TValue, TQuery, TResult>(
+//     target: BlockTarget<TValue, TQuery, TResult> | BlockTargetFactory<TValue, TQuery, TResult>,
+// ): BlockTargetFactory<TValue, TQuery, TResult> {
 //     return createTarget(target)
 // }
 
-// export type BlockDuplex<TInputValue, TOutputValue, TInputRequest, TOutputRequest> = DataTarget<
+// export type BlockDuplex<TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery> = DataTarget<
 //     BlockRef,
 //     TInputValue,
-//     TInputRequest,
-//     Stream<BlockRef, TOutputValue, TOutputRequest>
+//     TInpuTQuery,
+//     Stream<BlockRef, TOutputValue, TOutpuTQuery>
 // >
 
-// export type BlockDuplexFactory<TInputValue, TOutputValue, TInputRequest, TOutputRequest> = (
+// export type BlockDuplexFactory<TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery> = (
 //     opts: DataTargetFactoryOptions,
-// ) => BlockDuplex<TInputValue, TOutputValue, TInputRequest, TOutputRequest>
+// ) => BlockDuplex<TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>
 
-// export type BlockTransformer<TInputValue, TOutputValue, TRequest, TResult> = {
+// export type BlockTransformer<TInputValue, TOutputValue, TQuery, TResult> = {
 //     unfinalized: boolean
 //     transform: (
 //         write: {
 //             cursorUtils: DataCursorUtils<BlockRef>
-//             read: (opts: DataReadOptions<BlockRef, TRequest>) => AsyncIterable<DataMessage<BlockRef, TInputValue>>
+//             read: (opts: DataReadRequest<BlockRef, TQuery>) => AsyncIterable<DataMessage<BlockRef, TInputValue>>
 //         },
-//         read: DataReadOptions<BlockRef, TResult>,
+//         read: DataReadRequest<BlockRef, TResult>,
 //     ) => AsyncIterableIterator<DataMessage<BlockRef, TOutputValue>>
 // }
 
-// export type BlockTransformerFactory<TInputValue, TOutputValue, TRequest, TResult> = (
+// export type BlockTransformerFactory<TInputValue, TOutputValue, TQuery, TResult> = (
 //     opts: DataTargetFactoryOptions,
-// ) => BlockTransformer<TInputValue, TOutputValue, TRequest, TResult>
+// ) => BlockTransformer<TInputValue, TOutputValue, TQuery, TResult>
 
-// export function createBlockTransformer<TInputValue, TOutputValue, TRequest, TResult>(
-//     transformerFactory: BlockTransformerFactory<TInputValue, TOutputValue, TRequest, TResult>,
-// ): BlockDuplexFactory<TInputValue, TOutputValue, TRequest, TResult> {
+// export function createBlockTransformer<TInputValue, TOutputValue, TQuery, TResult>(
+//     transformerFactory: BlockTransformerFactory<TInputValue, TOutputValue, TQuery, TResult>,
+// ): BlockDuplexFactory<TInputValue, TOutputValue, TQuery, TResult> {
 //     return createTarget((opts: DataTargetFactoryOptions) => {
 //         return {
 //             unfinalized: opts.unfinalized,
@@ -99,7 +99,7 @@ export const BlockRefUtils = {
 //                     createSource<BlockRef, TOutputValue, TResult>({
 //                         unfinalized: transformer.unfinalized,
 //                         cursorUtils: BlockRefUtils,
-//                         read: (readOpts: DataReadOptions<BlockRef, TResult>) =>
+//                         read: (readOpts: DataReadRequest<BlockRef, TResult>) =>
 //                             transformer.transform(
 //                                 {
 //                                     cursorUtils: writeOpts.cursorUtils,
