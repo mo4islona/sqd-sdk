@@ -241,7 +241,7 @@ export function createTarget<TCursor, TValue, TRequest, TReturn>(
  * @template TOutputValue - The type of data values to be written to the target
  * @template TOutputRequest - The type of additional request parameters passed in by the target
  */
-export type DataDuplex<TInputCursor, TInputValue, TInputRequest, TOutputCursor, TOutputValue, TOutputRequest> =
+export type DataDuplex<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInputRequest, TOutputRequest> =
     DataTarget<TInputCursor, TInputValue, TInputRequest, DataStream<TOutputCursor, TOutputValue, TOutputRequest>>
 
 /**

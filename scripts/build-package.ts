@@ -332,7 +332,7 @@ async function updateExports(pkgDir: string, pkg: PackageJson, srcFiles: string[
 
     const exports: PackageExports = {}
 
-    for (const rawEntry of srcFiles) {
+    for (const rawEntry of srcFiles.sort((a, b) => a.localeCompare(b))) {
         const match = rawEntry.match(/src\/(.*)\.ts/)
         if (!match) continue
 

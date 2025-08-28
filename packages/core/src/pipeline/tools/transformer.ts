@@ -11,8 +11,8 @@ import {
 } from '../core'
 
 export type DataTransform<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInputRequest, TOutputRequest> = (
-    opts: DataWriteOptions<TInputCursor, TInputValue, TInputRequest>,
-) => DataWriteOptions<TOutputCursor, TOutputValue, TOutputRequest>
+    opts: DataWriteOptions<TInputCursor, TInputValue, TInputRequest> & {unfinalized: boolean},
+) => DataWriteOptions<TOutputCursor, TOutputValue, TOutputRequest> & {unfinalized?: boolean}
 
 export interface DataTransformerConfig<
     TInputCursor,
@@ -37,7 +37,7 @@ export function createTransformer<
     transform: DataTransform<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInputRequest, TOutputRequest>,
 ): (
     opts: DataTargetFactoryOptions,
-) => DataDuplex<TInputCursor, TInputValue, TInputRequest, TOutputCursor, TOutputValue, TOutputRequest>
+) => DataDuplex<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInputRequest, TOutputRequest>
 export function createTransformer<
     TInputCursor,
     TOutputCursor,
@@ -54,7 +54,7 @@ export function createTransformer<
         TInputRequest,
         TOutputRequest
     >,
-): DataDuplex<TInputCursor, TInputValue, TInputRequest, TOutputCursor, TOutputValue, TOutputRequest>
+): DataDuplex<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInputRequest, TOutputRequest>
 export function createTransformer<
     TInputCursor,
     TOutputCursor,
@@ -81,13 +81,16 @@ export function createTransformer<
         TInputRequest,
         DataStream<TOutputCursor, TOutputValue, TOutputRequest>
     >({
-        unfinalized: transformOrConfig.unfinalized,
+        unfinalized: transformOrConfig.unfinalized ?? true,
         write: (writeOpts) => {
-            const {cursorUtils, read} = transformOrConfig.transform(writeOpts)
+            const {cursorUtils, read, unfinalized} = transformOrConfig.transform({
+                ...writeOpts,
+                unfinalized: transformOrConfig.unfinalized ?? true,
+            })
 
             return createStream(
                 createSource({
-                    unfinalized: transformOrConfig.unfinalized,
+                    unfinalized: unfinalized ?? transformOrConfig.unfinalized ?? true,
                     cursorUtils,
                     read,
                 }),

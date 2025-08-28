@@ -7,12 +7,13 @@
     },
     "dependencies": {
         "@aws-sdk/core": "^3.775.0",
-        "@clickhouse/client": "^1.11.2",
         "@belopash/core": "workspace:^",
         "@belopash/solana-stream": "workspace:^",
         "@belopash/typeorm-target": "workspace:^",
+        "@clickhouse/client": "^1.11.2",
         "@subsquid/borsh": "^0.3.0",
         "@subsquid/typeorm-store": "^1.5.1",
+        "date-fns": "^4.1.0",
         "dotenv": "^16.4.7"
     },
     "devDependencies": {

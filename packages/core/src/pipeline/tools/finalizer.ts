@@ -160,10 +160,10 @@ function handleFork<TCursor, TValue>({
 
 export function createFinalizer<TCursor, TValue, TRequest>(): DataDuplex<
     TCursor,
-    TValue,
-    TRequest,
     TCursor,
     TValue,
+    TValue,
+    TRequest,
     TRequest
 > {
     return createTarget<TCursor, TValue, TRequest, DataStream<TCursor, TValue, TRequest>>({

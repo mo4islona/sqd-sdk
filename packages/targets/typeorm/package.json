@@ -1,6 +1,6 @@
 {
     "name": "@belopash/typeorm-target",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "description": "Optimized TypeORM based storage for SQD SDK",
     "type": "module",
     "main": "./lib/index.cjs",
@@ -75,16 +75,6 @@
             "require": {
                 "default": "./lib/store.cjs",
                 "types": "./lib/store.d.cts"
-            }
-        },
-        "./version": {
-            "import": {
-                "default": "./lib/version.js",
-                "types": "./lib/version.d.ts"
-            },
-            "require": {
-                "default": "./lib/version.cjs",
-                "types": "./lib/version.d.cts"
             }
         },
         "./utils/cacheMap": {
@@ -165,6 +155,16 @@
             "require": {
                 "default": "./lib/utils/stateManager.cjs",
                 "types": "./lib/utils/stateManager.d.cts"
+            }
+        },
+        "./version": {
+            "import": {
+                "default": "./lib/version.js",
+                "types": "./lib/version.d.ts"
+            },
+            "require": {
+                "default": "./lib/version.cjs",
+                "types": "./lib/version.d.cts"
             }
         }
     }

@@ -1,6 +1,6 @@
 {
     "name": "@belopash/evm-stream",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "description": "EVM block data streamer",
     "license": "GPL-3.0-or-later",
     "repository": "git@github.com:subsquid/squid.git",
@@ -33,36 +33,6 @@
             "require": {
                 "default": "./lib/index.cjs",
                 "types": "./lib/index.d.cts"
-            }
-        },
-        "./query": {
-            "import": {
-                "default": "./lib/query.js",
-                "types": "./lib/query.d.ts"
-            },
-            "require": {
-                "default": "./lib/query.cjs",
-                "types": "./lib/query.d.cts"
-            }
-        },
-        "./source": {
-            "import": {
-                "default": "./lib/source.js",
-                "types": "./lib/source.d.ts"
-            },
-            "require": {
-                "default": "./lib/source.cjs",
-                "types": "./lib/source.d.cts"
-            }
-        },
-        "./version": {
-            "import": {
-                "default": "./lib/version.js",
-                "types": "./lib/version.d.ts"
-            },
-            "require": {
-                "default": "./lib/version.cjs",
-                "types": "./lib/version.d.cts"
             }
         },
         "./objects/entities": {
@@ -103,6 +73,36 @@
             "require": {
                 "default": "./lib/objects/types.cjs",
                 "types": "./lib/objects/types.d.cts"
+            }
+        },
+        "./query": {
+            "import": {
+                "default": "./lib/query.js",
+                "types": "./lib/query.d.ts"
+            },
+            "require": {
+                "default": "./lib/query.cjs",
+                "types": "./lib/query.d.cts"
+            }
+        },
+        "./source": {
+            "import": {
+                "default": "./lib/source.js",
+                "types": "./lib/source.d.ts"
+            },
+            "require": {
+                "default": "./lib/source.cjs",
+                "types": "./lib/source.d.cts"
+            }
+        },
+        "./version": {
+            "import": {
+                "default": "./lib/version.js",
+                "types": "./lib/version.d.ts"
+            },
+            "require": {
+                "default": "./lib/version.cjs",
+                "types": "./lib/version.d.cts"
             }
         }
     }

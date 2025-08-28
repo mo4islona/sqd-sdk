@@ -1,6 +1,6 @@
 {
     "name": "@belopash/solana-stream",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "description": "SVM block data streamer",
     "license": "GPL-3.0-or-later",
     "repository": "git@github.com:subsquid/squid.git",
@@ -45,46 +45,6 @@
                 "types": "./lib/instruction.d.cts"
             }
         },
-        "./query": {
-            "import": {
-                "default": "./lib/query.js",
-                "types": "./lib/query.d.ts"
-            },
-            "require": {
-                "default": "./lib/query.cjs",
-                "types": "./lib/query.d.cts"
-            }
-        },
-        "./schema": {
-            "import": {
-                "default": "./lib/schema.js",
-                "types": "./lib/schema.d.ts"
-            },
-            "require": {
-                "default": "./lib/schema.cjs",
-                "types": "./lib/schema.d.cts"
-            }
-        },
-        "./source": {
-            "import": {
-                "default": "./lib/source.js",
-                "types": "./lib/source.d.ts"
-            },
-            "require": {
-                "default": "./lib/source.cjs",
-                "types": "./lib/source.d.cts"
-            }
-        },
-        "./version": {
-            "import": {
-                "default": "./lib/version.js",
-                "types": "./lib/version.d.ts"
-            },
-            "require": {
-                "default": "./lib/version.cjs",
-                "types": "./lib/version.d.cts"
-            }
-        },
         "./objects/entities": {
             "import": {
                 "default": "./lib/objects/entities.js",
@@ -123,6 +83,46 @@
             "require": {
                 "default": "./lib/objects/types.cjs",
                 "types": "./lib/objects/types.d.cts"
+            }
+        },
+        "./query": {
+            "import": {
+                "default": "./lib/query.js",
+                "types": "./lib/query.d.ts"
+            },
+            "require": {
+                "default": "./lib/query.cjs",
+                "types": "./lib/query.d.cts"
+            }
+        },
+        "./schema": {
+            "import": {
+                "default": "./lib/schema.js",
+                "types": "./lib/schema.d.ts"
+            },
+            "require": {
+                "default": "./lib/schema.cjs",
+                "types": "./lib/schema.d.cts"
+            }
+        },
+        "./source": {
+            "import": {
+                "default": "./lib/source.js",
+                "types": "./lib/source.d.ts"
+            },
+            "require": {
+                "default": "./lib/source.cjs",
+                "types": "./lib/source.d.cts"
+            }
+        },
+        "./version": {
+            "import": {
+                "default": "./lib/version.js",
+                "types": "./lib/version.d.ts"
+            },
+            "require": {
+                "default": "./lib/version.cjs",
+                "types": "./lib/version.d.cts"
             }
         }
     }
