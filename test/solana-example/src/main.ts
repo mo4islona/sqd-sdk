@@ -1,7 +1,7 @@
 import {HttpClient} from '@belopash/core/http-client'
 import {assert} from '@belopash/core/internal/misc'
 import {createLogger} from '@belopash/core/logger'
-import {createStream, createTracker, createMapper} from '@belopash/core/pipeline'
+import {createTracker, createMapper} from '@belopash/core/pipeline'
 import {PortalClient} from '@belopash/core/portal'
 import {solanaPortalDataSource, SolanaQueryBuilder} from '@belopash/solana-stream'
 import {createTypeormTarget} from '@belopash/typeorm-target/database'
@@ -37,33 +37,31 @@ async function main() {
         })
         .build()
 
-    await createStream(
-        solanaPortalDataSource({
-            portal,
-            fields: {
-                block: {number: true, timestamp: true, hash: true, parentHash: true},
-                transaction: {signatures: true, err: true, transactionIndex: true},
-                instruction: {
-                    programId: true,
-                    accounts: true,
-                    data: true,
-                    isCommitted: true,
-                    transactionIndex: true,
-                    instructionAddress: true,
-                },
-                tokenBalance: {
-                    account: true,
-                    preMint: true,
-                    preOwner: true,
-                    preAmount: true,
-                    postMint: true,
-                    postOwner: true,
-                    postAmount: true,
-                },
+    await solanaPortalDataSource({
+        portal,
+        fields: {
+            block: {number: true, timestamp: true, hash: true, parentHash: true},
+            transaction: {signatures: true, err: true, transactionIndex: true},
+            instruction: {
+                programId: true,
+                accounts: true,
+                data: true,
+                isCommitted: true,
+                transactionIndex: true,
+                instructionAddress: true,
             },
-            query: whirlpoolQuery,
-        }),
-    )
+            tokenBalance: {
+                account: true,
+                preMint: true,
+                preOwner: true,
+                preAmount: true,
+                postMint: true,
+                postOwner: true,
+                postAmount: true,
+            },
+        },
+        query: whirlpoolQuery,
+    })
         //.pipe(createFinalizer())
         .pipe(
             createMapper((block) => {

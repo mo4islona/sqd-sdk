@@ -1,12 +1,9 @@
-import type {DataCursorUtils} from '../cursor'
 import {
     createSource,
     createTarget,
     type DataTargetFactoryOptions,
-    type DataStream,
-    createStream,
+    type DataSource,
     type DataWriteContext,
-    type DataTarget,
     type DataDuplex,
 } from '../core'
 
@@ -47,7 +44,7 @@ export function createTransformer<TInputCursor, TOutputCursor, TInputValue, TOut
             })
     }
 
-    return createTarget<TInputCursor, TInputValue, TInpuTQuery, DataStream<TOutputCursor, TOutputValue, TOutpuTQuery>>({
+    return createTarget<TInputCursor, TInputValue, TInpuTQuery, DataSource<TOutputCursor, TOutputValue, TOutpuTQuery>>({
         unfinalized: transformOrConfig.unfinalized ?? true,
         write: (writeOpts) => {
             const {cursorUtils, read, unfinalized} = transformOrConfig.transform({
@@ -55,13 +52,11 @@ export function createTransformer<TInputCursor, TOutputCursor, TInputValue, TOut
                 unfinalized: transformOrConfig.unfinalized ?? true,
             })
 
-            return createStream(
-                createSource({
-                    unfinalized: unfinalized ?? transformOrConfig.unfinalized ?? true,
-                    cursorUtils,
-                    read,
-                }),
-            )
+            return createSource({
+                unfinalized: unfinalized ?? transformOrConfig.unfinalized ?? true,
+                cursorUtils,
+                read,
+            })
         },
     })
 }

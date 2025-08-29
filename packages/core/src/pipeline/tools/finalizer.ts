@@ -1,14 +1,5 @@
 import type {DataCursorUtils} from '../cursor'
-import {
-    createSource,
-    createTarget,
-    createStream,
-    type DataBatchMessage,
-    type DataBatchItem,
-    type DataForkMessage,
-    type DataStream,
-    type DataDuplex,
-} from '../core'
+import type {DataBatchMessage, DataBatchItem, DataForkMessage, DataDuplex} from '../core'
 import {maybeLast} from '../../internal/misc'
 import {createTransformer} from './transformer'
 

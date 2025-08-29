@@ -2,7 +2,6 @@ import {In} from 'typeorm'
 import {PortalClient} from '@belopash/core/portal'
 import {HttpClient} from '@belopash/core/http-client'
 import {
-    createStream,
     createTarget,
     createTracker,
     createTransformer,
@@ -13,13 +12,7 @@ import {
     type DataTargetFactoryOptions,
 } from '@belopash/core/pipeline'
 import {createTypeormTarget} from '@belopash/typeorm-target/database'
-import {
-    evmPortalDataSource,
-    EvmQueryBuilder,
-    type Block,
-    type EvmDataRequestRange,
-    type Log,
-} from '@belopash/evm-stream'
+import {evmPortalDataSource, EvmQueryBuilder, type Block, type EvmDataRequestRange} from '@belopash/evm-stream'
 import * as factoryAbi from './abi/factory'
 import * as poolAbi from './abi/pool'
 import {Pool, Swap} from './model'
@@ -44,23 +37,21 @@ let portal = new PortalClient({
 })
 
 async function main() {
-    await createStream(() =>
-        evmPortalDataSource({
-            portal,
-            fields: {
-                block: {number: true, timestamp: true, hash: true, parentHash: true},
-                log: {
-                    address: true,
-                    topics: true,
-                    data: true,
-                    transactionIndex: true,
-                    transactionHash: true,
-                    logIndex: true,
-                },
-                transaction: {hash: true, transactionIndex: true},
+    await evmPortalDataSource({
+        portal,
+        fields: {
+            block: {number: true, timestamp: true, hash: true, parentHash: true},
+            log: {
+                address: true,
+                topics: true,
+                data: true,
+                transactionIndex: true,
+                transactionHash: true,
+                logIndex: true,
             },
-        }),
-    )
+            transaction: {hash: true, transactionIndex: true},
+        },
+    })
         .pipe(createFactoryFilter({address: FACTORY_ADDRESS}))
         .pipe(createProgressTracker('evm'))
         .pipe(createLogFlattener())
@@ -93,35 +84,31 @@ function createFactoryFilter<
     address,
 }: {address: string}): (
     opts: DataTargetFactoryOptions,
-) => DataDuplex<
-    BlockRef,
-    BlockRef,
-    TValue,
-    TValue & {uniswap: {data: any; log: TValue['logs'][number]}[]},
-    EvmDataRequestRange[],
-    never
-> {
-    function createQuery(pools: {cursor: BlockRef; value: {poolAddress: string}}[], end: BlockRef | undefined) {
-        const queryBuiler = new EvmQueryBuilder()
+) => DataDuplex<BlockRef, BlockRef, TValue, TValue, EvmDataRequestRange[], never> {
+    const POOL_LIMIT = 4876 // 200KB limit
+    const POOLS_FILE = path.join(process.cwd(), 'assets', 'pools.json')
 
-        const limitedPools = pools.slice(0, 4876) // 200KB
-        queryBuiler.addLog({
+    const createSwapQuery = (pools: {cursor: BlockRef; value: {poolAddress: string}}[], end?: BlockRef) => {
+        const builder = new EvmQueryBuilder()
+        const limitedPools = pools.slice(0, POOL_LIMIT)
+
+        // Query for known pools
+        builder.addLog({
             range: {from: 0, to: end?.number},
             request: {
                 topic0: [poolAbi.events.Swap.topic],
                 address: limitedPools.map((p) => p.value.poolAddress),
             },
         })
-        const wildcardCursor = limitedPools[limitedPools.length - 1].cursor ?? end
-        if (wildcardCursor) {
-            queryBuiler.addLog({
-                range: {from: wildcardCursor.number + 1},
-                request: {
-                    topic0: [poolAbi.events.Swap.topic],
-                },
-            })
-        }
-        return queryBuiler.build()
+
+        // Wildcard query for new pools
+        const lastPoolCursor = limitedPools[limitedPools.length - 1]?.cursor ?? end
+        builder.addLog({
+            range: {from: lastPoolCursor.number + 1},
+            request: {topic0: [poolAbi.events.Swap.topic]},
+        })
+
+        return builder.build()
     }
 
     const factoryQuery = new EvmQueryBuilder()
@@ -133,109 +120,114 @@ function createFactoryFilter<
         })
         .build()
 
-    return createTransformer((opts) => {
-        const preindexedPools: {cursor: BlockRef; value: {poolAddress: string}}[] = []
-        let preindexedCursor: BlockRef | undefined = undefined
-        const dir = path.join(process.cwd(), 'assets')
-        const file = path.join(dir, 'pools.json')
-
+    const loadPools = (): {pools: {cursor: BlockRef; value: {poolAddress: string}}[]; cursor?: BlockRef} => {
         try {
-            if (fs.existsSync(file)) {
-                const json = fs.readFileSync(file, 'utf8')
-                const parsed = JSON.parse(json)
-                if (parsed && Array.isArray(parsed.pools)) {
-                    preindexedPools.push(...parsed.pools)
-                    preindexedCursor = parsed.cursor
+            if (fs.existsSync(POOLS_FILE)) {
+                const data = JSON.parse(fs.readFileSync(POOLS_FILE, 'utf8'))
+                return {
+                    pools: Array.isArray(data.pools) ? data.pools : [],
+                    cursor: data.cursor,
                 }
             }
         } catch {}
+        return {pools: []}
+    }
 
-        const savePools = () => {
-            fs.mkdirSync(dir, {recursive: true})
-            const out = {
-                cursor: preindexedCursor,
-                pools: preindexedPools,
+    const savePools = (pools: {cursor: BlockRef; value: {poolAddress: string}}[], cursor?: BlockRef) => {
+        fs.mkdirSync(path.dirname(POOLS_FILE), {recursive: true})
+        fs.writeFileSync(POOLS_FILE, JSON.stringify({pools, cursor}, null, 2))
+    }
+
+    const processPoolCreationLogs = (
+        logs: TValue['logs'],
+        cursor: BlockRef,
+        pools: {cursor: BlockRef; value: {poolAddress: string}}[],
+    ) => {
+        for (const log of logs) {
+            if (log.address.toLowerCase() === address.toLowerCase() && factoryAbi.events.PoolCreated.is(log)) {
+                const event = factoryAbi.events.PoolCreated.decode(log)
+                const poolAddress = event.pool.toLowerCase()
+                pools.push({cursor, value: {poolAddress}})
+                console.log('discovered pool', poolAddress)
             }
-            fs.writeFileSync(file, JSON.stringify(out, null, 2))
         }
+    }
+
+    const shouldStopPreindexing = (
+        itemCursor: BlockRef,
+        messageCursor: BlockRef,
+        cursorUtils: any,
+        finalizedHead?: BlockRef,
+    ) => {
+        return (
+            finalizedHead &&
+            (cursorUtils.compare(itemCursor, finalizedHead).isGreater ||
+                cursorUtils.compare(messageCursor, finalizedHead).isGreater)
+        )
+    }
+
+    return createTransformer((opts) => {
+        const {pools: preindexedPools, cursor: preindexedCursor} = loadPools()
 
         return {
             cursorUtils: opts.cursorUtils,
             read: async function* (readOpts) {
+                // Preindexing phase
                 console.log('preindexing starting...')
-                for await (let message of opts.read({
-                    cursor: preindexedCursor,
-                    query: factoryQuery,
-                })) {
-                    if (message.type === 'batch') {
-                        for (let item of message.data) {
-                            if (
-                                !message.finalizedHead ||
-                                opts.cursorUtils.compare(item.cursor, message.finalizedHead).isGreater
-                            ) {
-                                break
-                            }
+                for await (const message of opts.read({cursor: preindexedCursor, query: factoryQuery})) {
+                    if (message.type !== 'batch') continue
 
-                            const block = item.value
-                            for (let log of block.logs) {
-                                if (
-                                    log.address.toLowerCase() === FACTORY_ADDRESS &&
-                                    factoryAbi.events.PoolCreated.is(log)
-                                ) {
-                                    const event = factoryAbi.events.PoolCreated.decode(log)
-                                    const poolAddress = event.pool.toLowerCase()
-                                    preindexedPools.push({cursor: item.cursor, value: {poolAddress}})
-                                    console.log('discovered pool', poolAddress)
-                                }
-                            }
-
-                            preindexedCursor = item.cursor
-                        }
-
+                    for (const item of message.data) {
                         if (
-                            !message.finalizedHead ||
-                            opts.cursorUtils.compare(message.cursor, message.finalizedHead).isGreater
+                            shouldStopPreindexing(item.cursor, message.cursor, opts.cursorUtils, message.finalizedHead)
                         ) {
                             break
                         }
+                        processPoolCreationLogs(item.value.logs, item.cursor, preindexedPools)
+                    }
+
+                    if (
+                        shouldStopPreindexing(message.cursor, message.cursor, opts.cursorUtils, message.finalizedHead)
+                    ) {
+                        break
                     }
                 }
-                savePools()
-                console.log('preindex ended. known pools', preindexedPools.length)
 
-                const poolsQuery = createQuery(preindexedPools, preindexedCursor)
+                savePools(preindexedPools, preindexedCursor)
+                console.log('preindex ended. known pools: ', preindexedPools.length)
+
+                const poolsQuery = createSwapQuery(preindexedPools, preindexedCursor)
                 const poolsSet = new Set(preindexedPools.map((p) => p.value.poolAddress))
 
-                for await (let message of opts.read({
+                for await (const message of opts.read({
                     cursor: readOpts.cursor,
                     query: [...factoryQuery, ...poolsQuery],
                 })) {
-                    if (message.type === 'batch') {
-                        yield {
-                            type: 'batch',
-                            cursor: message.cursor,
-                            finalizedHead: message.finalizedHead,
-                            head: message.head,
-                            data: message.data.map((item) => {
-                                return {
-                                    cursor: item.cursor,
-                                    value: {
-                                        ...item.value,
-                                        uniswap: item.value.logs
-                                            .filter((l) => poolsSet.has(l.address) || l.address === address)
-                                            .map((l) => ({
-                                                data:
-                                                    l.address === address
-                                                        ? factoryAbi.events.PoolCreated.decode(l)
-                                                        : poolAbi.events.Swap.decode(l),
-                                                log: l,
-                                            })),
-                                    },
-                                }
-                            }),
-                        }
-                    } else {
+                    if (message.type !== 'batch') {
                         yield message
+                        continue
+                    }
+
+                    // FIXME: track new pools as well
+
+                    const data = message.data.map((i) => {
+                        return {
+                            cursor: i.cursor,
+                            value: {
+                                ...i.value,
+                                logs: i.value.logs.filter(
+                                    (log) => log.address === address || poolsSet.has(log.address),
+                                ),
+                            },
+                        }
+                    })
+
+                    yield {
+                        type: 'batch',
+                        cursor: message.cursor,
+                        finalizedHead: message.finalizedHead,
+                        head: message.head,
+                        data,
                     }
                 }
             },

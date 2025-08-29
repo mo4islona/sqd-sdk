@@ -1,6 +1,7 @@
 import {unexpectedCase} from '../internal/misc'
 import type {DataCursorUtils} from './cursor'
 import {ForkException} from './errors'
+import {createFinalizer, createMapper, createTransformer, type DataTransform} from './tools'
 
 /**
  * Represents a single data item with its associated cursor position.
@@ -64,6 +65,9 @@ export interface DataReadRequest<TCursor, TQuery> {
 
 /**
  * Represents a data source that can stream data with cursor-based positioning.
+ * Source that can be piped to targets or iterated over directly.
+ * Provides an interface for building data processing pipelines.
+ *
  * Data sources can be finalized (providing final data)
  * or unfinalized (providing data that can change due to forks).
  *
@@ -73,15 +77,56 @@ export interface DataReadRequest<TCursor, TQuery> {
  */
 export interface DataSource<TCursor, TValue, TQuery> {
     /** Whether this source can produce unfinalized data that may change due to forks (arising e.g. due to a reorg in the blockchain) */
-    unfinalized: boolean
+    readonly unfinalized: boolean
+
     /** Necessary utilities for comparing and manipulating cursor values */
-    cursorUtils: DataCursorUtils<TCursor>
+    readonly cursorUtils: DataCursorUtils<TCursor>
+
     /**
      * Reads data from the source starting from the cursor specified in the options
      * and honoring the additional request parameters.
      * Returns an async iterable of data messages (data batches or forks).
      */
     read(options: DataReadRequest<TCursor, TQuery>): AsyncIterable<DataMessage<TCursor, TValue>>
+
+    /**
+     * Pipes this stream to a target, creating a data processing pipeline.
+     *
+     * @template TReturn - The return type of the target's write operation
+     * @param targetOrFactory - The target to pipe to, or a factory function that creates a target
+     * @param opts - Optional configuration for the pipe operation
+     * @returns The result of the target's write operation
+     */
+    pipe<TReturn>(
+        targetOrFactory:
+            | DataTarget<TCursor, TValue, TQuery, TReturn>
+            | ((opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TQuery, TReturn>),
+        opts?: DataPipeOptions,
+    ): TReturn
+
+    /**
+     * Maps the data values to a new type.
+     *
+     * @template UValue - The type of the mapped data values
+     * @param fn - The mapping function
+     * @returns A DataStream instance that can be piped to targets or iterated over
+     */
+    map<UValue>(fn: (value: TValue) => UValue): DataSource<TCursor, UValue, TQuery>
+
+    /**
+     * Finalizes the stream, making it immutable.
+     *
+     * @returns A finalized DataStream instance that can be piped to targets or iterated over
+     */
+    finalize(): DataSource<TCursor, TValue, TQuery>
+
+    /**
+     * Makes the stream iterable, allowing direct access to the data values.
+     *
+     * @param opts - Optional read options for controlling the iteration
+     * @returns An async iterable of data values
+     */
+    [Symbol.asyncIterator](opts?: DataReadRequest<TCursor, TQuery>): AsyncIterable<TValue>
 }
 
 /**
@@ -95,6 +140,7 @@ export interface DataSource<TCursor, TValue, TQuery> {
 export interface DataWriteContext<TCursor, TValue, TQuery> {
     /** Necessary utilities for comparing and manipulating cursor values */
     cursorUtils: DataCursorUtils<TCursor>
+
     /**
      * Function to read data from the source stream that passes the context.
      * Returns an async iterable of data messages (data batches or forks).
@@ -115,6 +161,7 @@ export interface DataWriteContext<TCursor, TValue, TQuery> {
 export interface DataTarget<TCursor, TValue, TQuery, TReturn> {
     /** Whether this target can handle unfinalized data that may change due to forks (arising e.g. due to a reorg in the blockchain) */
     unfinalized: boolean
+
     /** Writes data obtained from the provided context */
     write(context: DataWriteContext<TCursor, TValue, TQuery>): TReturn
 }
@@ -144,11 +191,14 @@ export interface DataSourceConfig<TCursor, TValue, TQuery> {
     unfinalized?: boolean
     /** Necessary utilities for comparing and manipulating cursor values */
     cursorUtils: DataCursorUtils<TCursor>
+
     /**
-     * Function to read data from the source.
-     * Returns an async iterable of data messages (data batches or forks).
+     * Reads data from the source.
+     *
+     * @param request - The read request
+     * @returns An async iterable of data messages
      */
-    read(options: DataReadRequest<TCursor, TQuery>): AsyncIterable<DataMessage<TCursor, TValue>>
+    read(request: DataReadRequest<TCursor, TQuery>): AsyncIterable<DataMessage<TCursor, TValue>>
 }
 
 /**
@@ -161,13 +211,9 @@ export interface DataSourceConfig<TCursor, TValue, TQuery> {
  * @returns A configured DataSource instance
  */
 export function createSource<TCursor, TValue, TQuery>(
-    source: DataSourceConfig<TCursor, TValue, TQuery>,
+    config: DataSourceConfig<TCursor, TValue, TQuery>,
 ): DataSource<TCursor, TValue, TQuery> {
-    return {
-        unfinalized: source.unfinalized ?? true,
-        cursorUtils: source.cursorUtils,
-        read: (opts) => source.read(opts),
-    }
+    return new DataSource(config)
 }
 
 /**
@@ -245,96 +291,82 @@ export type DataDuplex<TInputCursor, TOutputCursor, TInputValue, TOutputValue, T
     TInputCursor,
     TInputValue,
     TInpuTQuery,
-    DataStream<TOutputCursor, TOutputValue, TOutpuTQuery>
+    DataSource<TOutputCursor, TOutputValue, TOutpuTQuery>
 >
 
-/**
- * Represents a data stream that can be piped to targets or iterated over directly.
- * Provides an interface for building data processing pipelines.
- *
- * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
- * @template TValue - The type of data values in the stream
- * @template TQuery - The type of additional request parameters that can be passed to the data source
- */
-export interface DataStream<TCursor, TValue, TQuery> {
-    /**
-     * Pipes this stream to a target, creating a data processing pipeline.
-     *
-     * @template TReturn - The return type of the target's write operation
-     * @param targetOrFactory - The target to pipe to, or a factory function that creates a target
-     * @param opts - Optional configuration for the pipe operation
-     * @returns The result of the target's write operation
-     */
+export const DataSource = class<TCursor, TValue, TQuery> implements DataSource<TCursor, TValue, TQuery> {
+    readonly #unfinalized: boolean
+    readonly #read: (request: DataReadRequest<TCursor, TQuery>) => AsyncIterable<DataMessage<TCursor, TValue>>
+    readonly #cursorUtils: DataCursorUtils<TCursor>
+
+    get unfinalized() {
+        return this.#unfinalized
+    }
+
+    get cursorUtils() {
+        return this.#cursorUtils
+    }
+
+    constructor(config: DataSourceConfig<TCursor, TValue, TQuery>) {
+        this.#unfinalized = config.unfinalized ?? true
+        this.#read = config.read
+        this.#cursorUtils = config.cursorUtils
+    }
+
+    read(request: DataReadRequest<TCursor, TQuery>): AsyncIterable<DataMessage<TCursor, TValue>> {
+        return this.#read(request)
+    }
+
     pipe<TReturn>(
         targetOrFactory:
             | DataTarget<TCursor, TValue, TQuery, TReturn>
             | ((opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TQuery, TReturn>),
         opts?: DataPipeOptions,
-    ): TReturn
+    ): TReturn {
+        const target =
+            typeof targetOrFactory === 'function' ? targetOrFactory({unfinalized: this.#unfinalized}) : targetOrFactory
 
-    /**
-     * Makes the stream iterable, allowing direct access to the data values.
-     *
-     * @param opts - Optional read options for controlling the iteration
-     * @returns An async iterable of data values
-     */
-    [Symbol.asyncIterator](opts?: DataReadRequest<TCursor, TQuery>): AsyncIterable<TValue>
-}
+        return pipe(this, target, opts)
+    }
 
-/**
- * Creates a data stream from a data source or source factory.
- *
- * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
- * @template TValue - The type of data values in the stream
- * @template TQuery - The type of additional request parameters that can be passed to the data source
- * @param sourceOrFactory - The data source or a factory function that creates a data source
- * @returns A DataStream instance that can be piped to targets or iterated over
- */
-export function createStream<TCursor, TValue, TQuery>(
-    sourceOrFactory: DataSource<TCursor, TValue, TQuery> | (() => DataSource<TCursor, TValue, TQuery>),
-): DataStream<TCursor, TValue, TQuery> {
-    const source = typeof sourceOrFactory === 'function' ? sourceOrFactory() : sourceOrFactory
+    map<UValue>(fn: (value: TValue) => UValue): DataSource<TCursor, UValue, TQuery> {
+        return this.pipe(createMapper(fn), {validateBatches: false})
+    }
 
-    return {
-        pipe: (targetOrFactory, opts: DataPipeOptions = {}) => {
-            const target =
-                typeof targetOrFactory === 'function'
-                    ? targetOrFactory({unfinalized: source.unfinalized})
-                    : targetOrFactory
+    finalize(): DataSource<TCursor, TValue, TQuery> {
+        return this.pipe(createFinalizer(), {validateBatches: false})
+    }
 
-            return pipe(source, target, opts)
-        },
-        [Symbol.asyncIterator]: (opts?: DataReadRequest<TCursor, TQuery>): AsyncIterable<TValue> => {
-            return pipe(
-                source,
-                {
-                    unfinalized: source.unfinalized,
-                    write: async function* (streamOpts: DataWriteContext<TCursor, TValue, TQuery>) {
-                        for await (const message of streamOpts.read(
-                            (opts ?? {cursor: undefined, request: undefined}) as DataReadRequest<TCursor, TQuery>,
-                        )) {
-                            switch (message.type) {
-                                case 'batch':
-                                    yield* message.data.map((item) => item.value)
-                                    break
-                                case 'fork':
-                                    throw new ForkException(message.cursors)
-                                default:
-                                    throw unexpectedCase((message as any).type)
-                            }
+    [Symbol.asyncIterator](opts?: DataReadRequest<TCursor, TQuery>): AsyncIterable<TValue> {
+        return pipe(
+            this,
+            {
+                unfinalized: this.#unfinalized,
+                write: async function* (streamOpts: DataWriteContext<TCursor, TValue, TQuery>) {
+                    for await (const message of streamOpts.read(
+                        (opts ?? {cursor: undefined, request: undefined}) as DataReadRequest<TCursor, TQuery>,
+                    )) {
+                        switch (message.type) {
+                            case 'batch':
+                                yield* message.data.map((item) => item.value)
+                                break
+                            case 'fork':
+                                throw new ForkException(message.cursors)
+                            default:
+                                throw unexpectedCase((message as any).type)
                         }
-                    },
+                    }
                 },
-                {},
-            )
-        },
+            },
+            {},
+        )
     }
 }
 
 function pipe<TCursor, TValue, TQuery, TReturn>(
     source: DataSource<TCursor, TValue, TQuery>,
     target: DataTarget<TCursor, TValue, TQuery, TReturn>,
-    opts: DataPipeOptions,
+    opts: DataPipeOptions = {},
 ): TReturn {
     if (source.unfinalized && !target.unfinalized) {
         throw new TypeError('Cannot pipe from unfinalized DataSource to finalized DataTarget')
