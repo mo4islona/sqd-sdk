@@ -23,6 +23,15 @@
         "typescript": "~5.5.4",
         "tslib": "^2.8.1"
     },
+    "files": [
+        "**/*.js",
+        "**/*.cjs",
+        "**/*.d.ts",
+        "**/*.d.cts",
+        "README.md",
+        "LICENSE",
+        "package.json"
+    ],
     "exports": {
         "./http-client/body": {
             "import": {

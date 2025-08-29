@@ -69,7 +69,7 @@ export function withErrorContext(ctx: any): (err: Error) => never {
 }
 
 export function annotateSyncError(
-    getCtx: (...args: any[]) => any
+    getCtx: (...args: any[]) => any,
 ): (proto: any, prop: string, d: PropertyDescriptor) => PropertyDescriptor {
     return function decorate(proto: any, prop: string, d: PropertyDescriptor): PropertyDescriptor {
         let {value: fn, ...options} = d
@@ -91,7 +91,7 @@ export function annotateSyncError(
 }
 
 export function annotateAsyncError(
-    getCtx: (...args: any[]) => any
+    getCtx: (...args: any[]) => any,
 ): (proto: any, prop: string, d: PropertyDescriptor) => PropertyDescriptor {
     return function decorate(proto: any, prop: string, d: PropertyDescriptor): PropertyDescriptor {
         let {value: fn, ...options} = d
@@ -176,7 +176,7 @@ export function* splitArray<T>(maxSize: number, arr: T[]): Iterable<T[]> {
 export async function splitParallelWork<T, R>(
     maxSize: number,
     tasks: T[],
-    run: (tasks: T[]) => Promise<R[]>
+    run: (tasks: T[]) => Promise<R[]>,
 ): Promise<R[]> {
     if (tasks.length <= maxSize) return run(tasks)
 

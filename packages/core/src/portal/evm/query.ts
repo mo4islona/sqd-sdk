@@ -477,7 +477,7 @@ const TransactionShape: ObjectValidatorShape<TransactionFields> = {
 }
 
 function getTraceFrameValidator<T extends FieldSelection['trace']>(
-    fields: T
+    fields: T,
 ): Validator<Trace<NonNullable<T>>, unknown> {
     let BaseShape = project(TraceBaseShape, fields)
 
@@ -487,7 +487,7 @@ function getTraceFrameValidator<T extends FieldSelection['trace']>(
             value: fields?.createValue,
             gas: fields?.createGas,
             init: fields?.createInit,
-        })
+        }),
     )
 
     let createResult = object(
@@ -495,7 +495,7 @@ function getTraceFrameValidator<T extends FieldSelection['trace']>(
             gasUsed: fields?.createResultGasUsed,
             code: fields?.createResultCode,
             address: fields?.createResultAddress,
-        })
+        }),
     )
 
     let create = object({
@@ -514,14 +514,14 @@ function getTraceFrameValidator<T extends FieldSelection['trace']>(
             gas: fields?.callGas,
             input: fields?.callInput,
             sighash: fields?.callSighash,
-        })
+        }),
     )
 
     let callResult = object(
         project(TraceCallResultShape, {
             gasUsed: fields?.callResultGasUsed,
             output: fields?.callResultOutput,
-        })
+        }),
     )
 
     let call = object({
@@ -536,7 +536,7 @@ function getTraceFrameValidator<T extends FieldSelection['trace']>(
             address: fields?.suicideAddress,
             refundAddress: fields?.suicideRefundAddress,
             balance: fields?.suicideBalance,
-        })
+        }),
     )
 
     let suicide = object({
@@ -550,7 +550,7 @@ function getTraceFrameValidator<T extends FieldSelection['trace']>(
             author: fields?.rewardAuthor,
             value: fields?.rewardValue,
             type: fields?.rewardType,
-        })
+        }),
     )
 
     let reward = object({
@@ -622,7 +622,7 @@ const TraceRewardActionShape: ObjectValidatorShape<TraceRewardActionFields> = {
 }
 
 function getStateDiffValidator<T extends FieldSelection['stateDiff']>(
-    fields: T
+    fields: T,
 ): Validator<StateDiff<NonNullable<T>>, unknown> {
     return taggedUnion('kind', {
         '+': object(project(StateDiffAddShape, fields)),

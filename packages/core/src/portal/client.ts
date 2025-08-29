@@ -150,13 +150,13 @@ export class PortalClient {
 
     getFinalizedStream<Q extends Query>(query: Q, options?: PortalStreamOptions): PortalStream<GetBlock<Q>> {
         return createPortalStream(query, this.getStreamOptions(options), async (q, o) =>
-            this.getStreamRequest('finalized-stream', q, o)
+            this.getStreamRequest('finalized-stream', q, o),
         )
     }
 
     getStream<Q extends Query>(query: Q, options?: PortalStreamOptions): PortalStream<GetBlock<Q>> {
         return createPortalStream(query, this.getStreamOptions(options), async (q, o) =>
-            this.getStreamRequest('stream', q, o)
+            this.getStreamRequest('stream', q, o),
         )
     }
 
@@ -190,7 +190,7 @@ export class PortalClient {
             }).catch(
                 withErrorContext({
                     query: query,
-                })
+                }),
             )
 
             switch (res.status) {
@@ -248,8 +248,8 @@ function createPortalStream<Q extends Query>(
     options: Required<PortalStreamOptions>,
     requestStream: (
         query: Q,
-        options?: PortalRequestOptions
-    ) => Promise<{finalizedHead?: BlockRef; stream?: AsyncIterable<string[]> | null | undefined}>
+        options?: PortalRequestOptions,
+    ) => Promise<{finalizedHead?: BlockRef; stream?: AsyncIterable<string[]> | null | undefined}>,
 ): PortalStream<GetBlock<Q>> {
     let {headPollInterval, request, ...bufferOptions} = options
 
@@ -271,7 +271,7 @@ function createPortalStream<Q extends Query>(
             {
                 ...request,
                 abort: buffer.signal,
-            }
+            },
         )
 
         const finalizedHead = res.finalizedHead
@@ -326,7 +326,7 @@ function createPortalStream<Q extends Query>(
 
     ingest().then(
         () => buffer.close(),
-        (err) => buffer.fail(err)
+        (err) => buffer.fail(err),
     )
 
     return buffer.iterate()
@@ -544,12 +544,15 @@ class LineSplitter {
 export class ForkException extends Error {
     override readonly name = 'ForkError'
 
-    constructor(readonly lastBlocks: BlockRef[], readonly head: BlockRef) {
+    constructor(
+        readonly lastBlocks: BlockRef[],
+        readonly head: BlockRef,
+    ) {
         let parent = last(lastBlocks)
         super(
             `expected ${head.number + 1} to have parent ${parent.number}#${parent.hash}, but got ${head.number}#${
                 head.hash
-            }`
+            }`,
         )
     }
 }

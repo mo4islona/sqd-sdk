@@ -26,43 +26,15 @@ export interface DataTransformerConfig<
     transform: DataTransform<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>
 }
 
-export function createTransformer<
-    TInputCursor,
-    TOutputCursor,
-    TInputValue,
-    TOutputValue,
-    TInpuTQuery,
-    TOutpuTQuery,
->(
+export function createTransformer<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>(
     transform: DataTransform<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>,
 ): (
     opts: DataTargetFactoryOptions,
 ) => DataDuplex<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>
-export function createTransformer<
-    TInputCursor,
-    TOutputCursor,
-    TInputValue,
-    TOutputValue,
-    TInpuTQuery,
-    TOutpuTQuery,
->(
-    config: DataTransformerConfig<
-        TInputCursor,
-        TOutputCursor,
-        TInputValue,
-        TOutputValue,
-        TInpuTQuery,
-        TOutpuTQuery
-    >,
+export function createTransformer<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>(
+    config: DataTransformerConfig<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>,
 ): DataDuplex<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>
-export function createTransformer<
-    TInputCursor,
-    TOutputCursor,
-    TInputValue,
-    TOutputValue,
-    TInpuTQuery,
-    TOutpuTQuery,
->(
+export function createTransformer<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>(
     transformOrConfig:
         | DataTransform<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>
         | DataTransformerConfig<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>,
@@ -75,12 +47,7 @@ export function createTransformer<
             })
     }
 
-    return createTarget<
-        TInputCursor,
-        TInputValue,
-        TInpuTQuery,
-        DataStream<TOutputCursor, TOutputValue, TOutpuTQuery>
-    >({
+    return createTarget<TInputCursor, TInputValue, TInpuTQuery, DataStream<TOutputCursor, TOutputValue, TOutpuTQuery>>({
         unfinalized: transformOrConfig.unfinalized ?? true,
         write: (writeOpts) => {
             const {cursorUtils, read, unfinalized} = transformOrConfig.transform({
