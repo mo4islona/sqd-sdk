@@ -3,10 +3,13 @@ import {PortalClient} from '@belopash/core/portal'
 import {HttpClient} from '@belopash/core/http-client'
 import {
     createStream,
+    createTarget,
     createTracker,
     createTransformer,
+    DataCursor,
     type BlockRef,
     type DataDuplex,
+    type DataMessage,
     type DataTargetFactoryOptions,
 } from '@belopash/core/pipeline'
 import {createTypeormTarget} from '@belopash/typeorm-target/database'
@@ -60,26 +63,18 @@ async function main() {
     )
         .pipe(createFactoryFilter({address: FACTORY_ADDRESS}))
         .pipe(createProgressTracker('evm'))
+        .pipe(createLogFlattener())
         .pipe(
-            createTypeormTarget({}, async (store, batch) => {
-                let pools: PoolData[] = []
-                let swaps: SwapEvent[] = []
-
-                for (let block of batch) {
-                    for (let event of block.uniswap) {
-                        const address = event.log.address.toLowerCase()
-                        const topic0 = event.log.topics[0]?.toLowerCase()
-
-                        if (address === FACTORY_ADDRESS && topic0 === factoryAbi.events.PoolCreated.topic) {
-                            pools.push(getPoolData(event.log))
-                        } else if (topic0 === poolAbi.events.Swap.topic) {
-                            swaps.push(getSwap(block, event.log))
+            createTarget({
+                write: async (ctx) => {
+                    for await (let message of ctx.read({cursor: undefined})) {
+                        if (message.type === 'batch') {
+                            for (let item of message.data) {
+                                console.log(item.value.id)
+                            }
                         }
                     }
-                }
-
-                await createPools(store, pools)
-                await processSwaps(store, swaps)
+                },
             }),
         )
 
@@ -354,6 +349,80 @@ async function processSwaps(store: Pick<OrmStore, 'findBy' | 'insert'>, swapsDat
     if (swaps.length > 0) {
         await store.insert(swaps)
     }
+}
+
+interface LogRef extends BlockRef {
+    logIndex?: number
+}
+
+const LogRefUrils = {
+    compare: (a: LogRef, b: LogRef) => {
+        if (a.number > b.number) return DataCursor.Greater
+        if (a.number < b.number) return DataCursor.Less
+        if (a.hash !== b.hash) return DataCursor.Fork
+        if (a.logIndex == null && b.logIndex == null) return DataCursor.Equal
+        if (a.logIndex == null) return DataCursor.Greater
+        if (b.logIndex == null) return DataCursor.Less
+        if (a.logIndex > b.logIndex) return DataCursor.Greater
+        if (a.logIndex < b.logIndex) return DataCursor.Less
+        return DataCursor.Equal
+    },
+    serialize: (value: LogRef) => value,
+    deserialize: (value: unknown) => value as LogRef,
+}
+
+function createLogFlattener<
+    TValue extends Block<{
+        log: {
+            address: true
+            topics: true
+            data: true
+        }
+    }>,
+>() {
+    return createTransformer<BlockRef, LogRef, TValue, TValue['logs'][number], unknown, never>((ctx) => {
+        return {
+            cursorUtils: LogRefUrils,
+            read: async function* (req) {
+                for await (let message of ctx.read(req)) {
+                    if (message.type === 'fork') {
+                        yield message
+                        continue
+                    }
+
+                    const flattenedLogs = message.data.flatMap((item) =>
+                        item.value.logs.map((log) => ({
+                            cursor: {...item.cursor, logIndex: log.logIndex},
+                            value: log,
+                        })),
+                    )
+
+                    const filteredLogs =
+                        req.cursor && LogRefUrils.compare(req.cursor, flattenedLogs[0].cursor).isGreaterOrEqual
+                            ? flattenedLogs.filter(
+                                  (item) => LogRefUrils.compare(item.cursor, req.cursor!).isGreaterOrEqual,
+                              )
+                            : flattenedLogs
+
+                    const getEffectiveCursor = (referenceCursor: LogRef) => {
+                        if (filteredLogs.length === 0) return referenceCursor
+                        const lastLogCursor = filteredLogs[filteredLogs.length - 1].cursor
+                        return LogRefUrils.compare(lastLogCursor, referenceCursor).isGreater
+                            ? lastLogCursor
+                            : referenceCursor
+                    }
+
+                    yield {
+                        type: 'batch',
+                        cursor: getEffectiveCursor(message.cursor),
+                        head: getEffectiveCursor(message.head),
+                        finalizedHead: message.finalizedHead,
+                        data: filteredLogs,
+                    }
+                }
+            },
+        }
+    })
 }
 
 function toEntityMap<E extends {id: string}>(entities: E[]): Map<string, E> {
