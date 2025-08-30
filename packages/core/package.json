@@ -353,6 +353,16 @@
                 "types": "./lib/pipeline/index.d.cts"
             }
         },
+        "./pipeline/tools/filter": {
+            "import": {
+                "default": "./lib/pipeline/tools/filter.js",
+                "types": "./lib/pipeline/tools/filter.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/tools/filter.cjs",
+                "types": "./lib/pipeline/tools/filter.d.cts"
+            }
+        },
         "./pipeline/tools/finalizer": {
             "import": {
                 "default": "./lib/pipeline/tools/finalizer.js",
@@ -381,6 +391,26 @@
             "require": {
                 "default": "./lib/pipeline/tools/mapper.cjs",
                 "types": "./lib/pipeline/tools/mapper.d.cts"
+            }
+        },
+        "./pipeline/tools/reducer": {
+            "import": {
+                "default": "./lib/pipeline/tools/reducer.js",
+                "types": "./lib/pipeline/tools/reducer.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/tools/reducer.cjs",
+                "types": "./lib/pipeline/tools/reducer.d.cts"
+            }
+        },
+        "./pipeline/tools/scanner": {
+            "import": {
+                "default": "./lib/pipeline/tools/scanner.js",
+                "types": "./lib/pipeline/tools/scanner.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/tools/scanner.cjs",
+                "types": "./lib/pipeline/tools/scanner.d.cts"
             }
         },
         "./pipeline/tools/tracker": {

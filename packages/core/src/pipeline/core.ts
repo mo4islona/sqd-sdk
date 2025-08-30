@@ -1,7 +1,7 @@
 import {unexpectedCase} from '../internal/misc'
 import type {DataCursorUtils} from './cursor'
 import {ForkException} from './errors'
-import {createFinalizer, createMapper, createTransformer, type DataTransform} from './tools'
+import {createFinalizer, createMapper, createFilter, createScanner, createReducer} from './tools'
 
 /**
  * Represents a single data item with its associated cursor position.
@@ -111,7 +111,43 @@ export interface DataSource<TCursor, TValue, TQuery> {
      * @param fn - The mapping function
      * @returns A DataStream instance that can be piped to targets or iterated over
      */
-    map<UValue>(fn: (value: TValue) => UValue): DataSource<TCursor, UValue, TQuery>
+    map<UValue>(mapper: (value: TValue) => UValue): DataSource<TCursor, UValue, TQuery>
+
+    /**
+     * Filters the data values based on a predicate function.
+     *
+     * @param predicate - The predicate function to test each value
+     * @returns A DataSource instance with filtered values
+     */
+    filter(predicate: (value: TValue) => boolean): DataSource<TCursor, TValue, TQuery>
+
+    /**
+     * Scans the data values, emitting intermediate accumulated values as a stream.
+     *
+     * @template UValue - The type of the accumulated value
+     * @param reducer - The reducer function to accumulate values
+     * @param initialValue - The initial value for the accumulator
+     * @returns A DataSource instance with accumulated values
+     */
+    scan<UValue>(
+        reducer: (accumulator: UValue, value: TValue) => UValue,
+        initialValue: UValue,
+    ): DataSource<TCursor, UValue, TQuery>
+
+    /**
+     * Reduces the data values to a single accumulated value by consuming the entire stream.
+     *
+     * @template UValue - The type of the accumulated value
+     * @param reducer - The reducer function to accumulate values
+     * @param initialValue - The initial value for the accumulator
+     * @param opts - Optional read options for controlling the iteration
+     * @returns A Promise that resolves to the final accumulated value
+     */
+    reduce<UValue>(
+        reducer: (accumulator: UValue, value: TValue) => UValue,
+        initialValue: UValue,
+        opts?: DataReadRequest<TCursor, TQuery>,
+    ): Promise<UValue>
 
     /**
      * Finalizes the stream, making it immutable.
@@ -294,7 +330,15 @@ export type DataDuplex<TInputCursor, TOutputCursor, TInputValue, TOutputValue, T
     DataSource<TOutputCursor, TOutputValue, TOutpuTQuery>
 >
 
-export const DataSource = class<TCursor, TValue, TQuery> implements DataSource<TCursor, TValue, TQuery> {
+export interface DataSourceConstructor {
+    new <TCursor, TValue, TQuery>(
+        config: DataSourceConfig<TCursor, TValue, TQuery>,
+    ): DataSource<TCursor, TValue, TQuery>
+}
+
+export const DataSource: DataSourceConstructor = class<TCursor, TValue, TQuery>
+    implements DataSource<TCursor, TValue, TQuery>
+{
     readonly #unfinalized: boolean
     readonly #read: (request: DataReadRequest<TCursor, TQuery>) => AsyncIterable<DataMessage<TCursor, TValue>>
     readonly #cursorUtils: DataCursorUtils<TCursor>
@@ -333,8 +377,27 @@ export const DataSource = class<TCursor, TValue, TQuery> implements DataSource<T
         return this.pipe(createMapper(fn), {validateBatches: false})
     }
 
+    filter(predicate: (value: TValue) => boolean): DataSource<TCursor, TValue, TQuery> {
+        return this.pipe(createFilter(predicate), {validateBatches: false})
+    }
+
+    scan<UValue>(
+        reducer: (accumulator: UValue, value: TValue) => UValue,
+        initialValue: UValue,
+    ): DataSource<TCursor, UValue, TQuery> {
+        return this.pipe(createScanner(reducer, initialValue), {validateBatches: false})
+    }
+
+    async reduce<UValue>(
+        reducer: (accumulator: UValue, value: TValue) => UValue,
+        initialValue: UValue,
+        opts?: DataReadRequest<TCursor, TQuery>,
+    ): Promise<UValue> {
+        return this.pipe(createReducer(reducer, initialValue), {})
+    }
+
     finalize(): DataSource<TCursor, TValue, TQuery> {
-        return this.pipe(createFinalizer(), {validateBatches: false})
+        return this.pipe(createFinalizer(), {})
     }
 
     [Symbol.asyncIterator](opts?: DataReadRequest<TCursor, TQuery>): AsyncIterable<TValue> {

@@ -1,8 +1,8 @@
 import {
     createSource,
     createTarget,
+    DataSource,
     type DataTargetFactoryOptions,
-    type DataSource,
     type DataWriteContext,
     type DataDuplex,
 } from '../core'
@@ -47,15 +47,19 @@ export function createTransformer<TInputCursor, TOutputCursor, TInputValue, TOut
     return createTarget<TInputCursor, TInputValue, TInpuTQuery, DataSource<TOutputCursor, TOutputValue, TOutpuTQuery>>({
         unfinalized: transformOrConfig.unfinalized ?? true,
         write: (writeOpts) => {
-            const {cursorUtils, read, unfinalized} = transformOrConfig.transform({
+            const transformed = transformOrConfig.transform({
                 ...writeOpts,
                 unfinalized: transformOrConfig.unfinalized ?? true,
             })
 
+            if (transformed instanceof DataSource) {
+                return transformed
+            }
+
             return createSource({
-                unfinalized: unfinalized ?? transformOrConfig.unfinalized ?? true,
-                cursorUtils,
-                read,
+                unfinalized: transformed.unfinalized ?? transformOrConfig.unfinalized ?? true,
+                cursorUtils: transformed.cursorUtils,
+                read: transformed.read,
             })
         },
     })
