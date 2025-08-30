@@ -1,7 +1,7 @@
 import {unexpectedCase} from '../internal/misc'
 import type {DataCursorUtils} from './cursor'
 import {ForkException} from './errors'
-import {createFinalizer, createMapper, createFilter, createScanner, createReducer} from './tools'
+import {createFinalizer, createMapper, createFilter, createScanner, createReducer, createForEach} from './tools'
 
 /**
  * Represents a single data item with its associated cursor position.
@@ -96,7 +96,7 @@ export interface DataTargetFactoryOptions {
 /**
  * Configuration options for pipe operations.
  */
-export interface DataPipeOptions {
+export interface DataPipeOptions<TCursor, TQuery> {
     /** Whether to validate batch ordering and cursor consistency (default: false) */
     validateBatches?: boolean
 }
@@ -139,7 +139,7 @@ export interface DataSource<TCursor, TValue, TQuery> {
         targetOrFactory:
             | DataTarget<TCursor, TValue, TQuery, TReturn>
             | ((opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TQuery, TReturn>),
-        opts?: DataPipeOptions,
+        opts?: DataPipeOptions<TCursor, TQuery>,
     ): TReturn
 
     /**
@@ -184,8 +184,17 @@ export interface DataSource<TCursor, TValue, TQuery> {
     reduce<UValue>(
         reducer: (accumulator: UValue, value: TValue) => UValue,
         initialValue: UValue,
-        opts?: DataReadRequest<TCursor, TQuery>,
+        opts?: DataPipeOptions<TCursor, TQuery>,
     ): Promise<UValue>
+
+    /**
+     * Executes a provided function once for each data value in the stream.
+     *
+     * @param callback - Function to execute for each value
+     * @param opts - Optional read options for controlling the iteration
+     * @returns A Promise that resolves when all values have been processed
+     */
+    forEach(callback: (value: TValue) => void | Promise<void>, opts?: DataPipeOptions<TCursor, TQuery>): Promise<void>
 
     /**
      * Finalizes the stream, making it immutable.
@@ -344,7 +353,7 @@ export const DataSource: DataSourceConstructor = class<TCursor, TValue, TQuery>
         targetOrFactory:
             | DataTarget<TCursor, TValue, TQuery, TReturn>
             | ((opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TQuery, TReturn>),
-        opts?: DataPipeOptions,
+        opts?: DataPipeOptions<TCursor, TQuery>,
     ): TReturn {
         const target =
             typeof targetOrFactory === 'function' ? targetOrFactory({unfinalized: this.#unfinalized}) : targetOrFactory
@@ -370,9 +379,16 @@ export const DataSource: DataSourceConstructor = class<TCursor, TValue, TQuery>
     async reduce<UValue>(
         reducer: (accumulator: UValue, value: TValue) => UValue,
         initialValue: UValue,
-        opts?: DataReadRequest<TCursor, TQuery>,
+        opts?: DataPipeOptions<TCursor, TQuery>,
     ): Promise<UValue> {
-        return this.pipe(createReducer(reducer, initialValue), {})
+        return this.pipe(createReducer(reducer, initialValue), opts)
+    }
+
+    async forEach(
+        callback: (value: TValue) => void | Promise<void>,
+        opts?: DataPipeOptions<TCursor, TQuery>,
+    ): Promise<void> {
+        return this.pipe(createForEach(callback), opts)
     }
 
     finalize(): DataSource<TCursor, TValue, TQuery> {
@@ -570,7 +586,7 @@ function validateBatch<TCursor, TValue, TQuery>(
 function pipe<TCursor, TValue, TQuery, TReturn>(
     source: DataSource<TCursor, TValue, TQuery>,
     target: DataTarget<TCursor, TValue, TQuery, TReturn>,
-    opts?: DataPipeOptions,
+    opts?: DataPipeOptions<TCursor, TQuery>,
 ) {
     if (source.unfinalized && !target.unfinalized) {
         throw new TypeError('Cannot pipe from unfinalized DataSource to finalized DataTarget')

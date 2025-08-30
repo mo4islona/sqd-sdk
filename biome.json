@@ -26,6 +26,9 @@
             },
             "performance": {
                 "noDelete": "off"
+            },
+            "complexity": {
+                "noForEach": "off"
             }
         },
         "ignore": ["*/lib/**/*"]

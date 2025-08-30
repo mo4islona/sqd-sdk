@@ -55,19 +55,7 @@ async function main() {
         .pipe(createFactoryFilter({address: FACTORY_ADDRESS}))
         .pipe(createProgressTracker('evm'))
         .pipe(createLogFlattener())
-        .pipe(
-            createTarget({
-                write: async (ctx) => {
-                    for await (let message of ctx.read({cursor: undefined})) {
-                        if (message.type === 'batch') {
-                            for (let item of message.data) {
-                                console.log(item.value.id)
-                            }
-                        }
-                    }
-                },
-            }),
-        )
+        .forEach((item) => console.log(item.id))
 
     console.log('end')
 }

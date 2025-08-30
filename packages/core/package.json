@@ -373,6 +373,16 @@
                 "types": "./lib/pipeline/tools/finalizer.d.cts"
             }
         },
+        "./pipeline/tools/forEach": {
+            "import": {
+                "default": "./lib/pipeline/tools/forEach.js",
+                "types": "./lib/pipeline/tools/forEach.d.ts"
+            },
+            "require": {
+                "default": "./lib/pipeline/tools/forEach.cjs",
+                "types": "./lib/pipeline/tools/forEach.d.cts"
+            }
+        },
         "./pipeline/tools": {
             "import": {
                 "default": "./lib/pipeline/tools/index.js",
