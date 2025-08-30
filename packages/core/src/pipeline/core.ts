@@ -47,6 +47,9 @@ export interface DataForkMessage<TCursor> {
     cursors: TCursor[]
 }
 
+/**
+ * Union type representing possible data messages in the pipeline.
+ */
 export type DataMessage<TCursor, TValue> = DataBatchMessage<TCursor, TValue> | DataForkMessage<TCursor>
 
 /**
@@ -61,6 +64,41 @@ export interface DataReadRequest<TCursor, TQuery> {
     cursor: TCursor | undefined
     /** Additional request parameters for the data source (optional) */
     query?: TQuery
+}
+
+/**
+ * Context provided to data targets when writing data.
+ * Contains the cursor utilities and a read function to access the data stream.
+ *
+ * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
+ * @template TValue - The type of data values
+ * @template TQuery - The type of additional request parameters for the data source that passes the context
+ */
+export interface DataWriteContext<TCursor, TValue, TQuery> {
+    /** Necessary utilities for comparing and manipulating cursor values */
+    cursorUtils: DataCursorUtils<TCursor>
+
+    /**
+     * Function to read data from the source stream that passes the context.
+     * Returns an async iterable of data messages (data batches or forks).
+     */
+    read(options: DataReadRequest<TCursor, TQuery>): AsyncIterable<DataMessage<TCursor, TValue>>
+}
+
+/**
+ * Configuration options for data target factories.
+ */
+export interface DataTargetFactoryOptions {
+    /** Whether the target should handle unfinalized data that may change due to forks (arising e.g. due to a reorg in the blockchain) */
+    unfinalized: boolean
+}
+
+/**
+ * Configuration options for pipe operations.
+ */
+export interface DataPipeOptions {
+    /** Whether to validate batch ordering and cursor consistency (default: false) */
+    validateBatches?: boolean
 }
 
 /**
@@ -166,25 +204,6 @@ export interface DataSource<TCursor, TValue, TQuery> {
 }
 
 /**
- * Context provided to data targets when writing data.
- * Contains the cursor utilities and a read function to access the data stream.
- *
- * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
- * @template TValue - The type of data values
- * @template TQuery - The type of additional request parameters for the data source that passes the context
- */
-export interface DataWriteContext<TCursor, TValue, TQuery> {
-    /** Necessary utilities for comparing and manipulating cursor values */
-    cursorUtils: DataCursorUtils<TCursor>
-
-    /**
-     * Function to read data from the source stream that passes the context.
-     * Returns an async iterable of data messages (data batches or forks).
-     */
-    read(options: DataReadRequest<TCursor, TQuery>): AsyncIterable<DataMessage<TCursor, TValue>>
-}
-
-/**
  * Represents a data target that can consume data from a data stream.
  * Data targets can be finalized (only accept final data)
  * or unfinalized (accept both final and unfinalized data, capable of handling forks).
@@ -203,20 +222,25 @@ export interface DataTarget<TCursor, TValue, TQuery, TReturn> {
 }
 
 /**
- * @template unfinalized - Whether the target should handle unfinalized data
+ * Represents a duplex data stream that can both consume from a source and write to a target.
+ * This is useful for data transformation pipelines where data flows through multiple stages.
+ *
+ * @template TInputCursor - The cursor type (e.g. block height + hash) for the source data
+ * @template TInputValue - The type of source data values
+ * @template TInpuTQuery - The type of additional request parameters to be passed to the source
+ * @template TOutputCursor - The cursor type for the target data
+ * @template TOutputValue - The type of data values to be written to the target
+ * @template TOutpuTQuery - The type of additional request parameters passed in by the target
  */
-export interface DataTargetFactoryOptions {
-    /** Whether the target should handle unfinalized data that may change due to forks (arising e.g. due to a reorg in the blockchain) */
-    unfinalized: boolean
-}
-
-export interface DataPipeOptions {
-    /** Whether to validate batch ordering and cursor consistency (default: false) */
-    validateBatches?: boolean
-}
+export type DataDuplex<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery> = DataTarget<
+    TInputCursor,
+    TInputValue,
+    TInpuTQuery,
+    DataSource<TOutputCursor, TOutputValue, TOutpuTQuery>
+>
 
 /**
- * All necessities for creating a data source.
+ * Configuration interface for creating a data source.
  *
  * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
  * @template TValue - The type of data values produced by this source
@@ -238,110 +262,26 @@ export interface DataSourceConfig<TCursor, TValue, TQuery> {
 }
 
 /**
- * Creates a data source from a configuration object.
- *
- * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
- * @template TValue - The type of data values produced by this source
- * @template TQuery - The type of additional request parameters accepted by this source at runtime
- * @param source - Configuration object defining the data source behavior
- * @returns A configured DataSource instance
+ * Constructor interface for the DataSource class.
  */
-export function createSource<TCursor, TValue, TQuery>(
-    config: DataSourceConfig<TCursor, TValue, TQuery>,
-): DataSource<TCursor, TValue, TQuery> {
-    return new DataSource(config)
-}
-
-/**
- * All necessities for creating a data target.
- *
- * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
- * @template TValue - The type of data values consumed by this target
- * @template TQuery - The type of additional request parameters to be passed back to the data source
- * @template TReturn - The return type of the write operation
- */
-export interface DataTargetConfig<TCursor, TValue, TQuery, TReturn> {
-    /** Whether this target can handle unfinalized data */
-    unfinalized?: boolean
-    /**
-     * Function to write data obtained from the provided context.
-     */
-    write(context: DataWriteContext<TCursor, TValue, TQuery>): TReturn
-}
-
-/**
- * Creates a data target from a configuration object or factory function.
- *
- * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
- * @template TValue - The type of data values consumed by this target
- * @template TQuery - The type of additional request parameters to be passed back to the data source
- * @template TReturn - The return type of the write operation
- * @param config - Configuration object defining the data target behavior
- * @returns A configured DataTarget instance
- */
-export function createTarget<TCursor, TValue, TQuery, TReturn>(
-    config: DataTargetConfig<TCursor, TValue, TQuery, TReturn>,
-): DataTarget<TCursor, TValue, TQuery, TReturn>
-/**
- * Creates a data target factory from a factory function.
- *
- * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
- * @template TValue - The type of data values consumed by this target
- * @template TQuery - The type of additional request parameters to be passed back to the data source
- * @template TReturn - The return type of the write operation
- * @param factory - Factory function that creates a target configuration based on options
- * @returns A configured DataTarget instance
- */
-export function createTarget<TCursor, TValue, TQuery, TReturn>(
-    factory: (opts: DataTargetFactoryOptions) => DataTargetConfig<TCursor, TValue, TQuery, TReturn>,
-): (opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TQuery, TReturn>
-export function createTarget<TCursor, TValue, TQuery, TReturn>(
-    configOrFactory:
-        | DataTargetConfig<TCursor, TValue, TQuery, TReturn>
-        | ((opts: DataTargetFactoryOptions) => DataTargetConfig<TCursor, TValue, TQuery, TReturn>),
-):
-    | DataTarget<TCursor, TValue, TQuery, TReturn>
-    | ((opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TQuery, TReturn>) {
-    if (typeof configOrFactory === 'function') {
-        return (opts: DataTargetFactoryOptions) => createTarget(configOrFactory(opts))
-    }
-
-    return {
-        unfinalized: configOrFactory.unfinalized ?? true,
-        write: (opts) => configOrFactory.write(opts),
-    }
-}
-
-/**
- * Represents a duplex data stream that can both consume from a source and write to a target.
- * This is useful for data transformation pipelines where data flows through multiple stages.
- *
- * @template TInputCursor - The cursor type (e.g. block height + hash) for the source data
- * @template TInputValue - The type of source data values
- * @template TInpuTQuery - The type of additional request parameters to be passed to the source
- * @template TOutputCursor - The cursor type for the target data
- * @template TOutputValue - The type of data values to be written to the target
- * @template TOutpuTQuery - The type of additional request parameters passed in by the target
- */
-export type DataDuplex<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery> = DataTarget<
-    TInputCursor,
-    TInputValue,
-    TInpuTQuery,
-    DataSource<TOutputCursor, TOutputValue, TOutpuTQuery>
->
-
 export interface DataSourceConstructor {
     new <TCursor, TValue, TQuery>(
         config: DataSourceConfig<TCursor, TValue, TQuery>,
     ): DataSource<TCursor, TValue, TQuery>
 }
 
+/**
+ * Concrete implementation of the DataSource interface.
+ * Provides streaming data processing capabilities with cursor-based positioning.
+ */
 export const DataSource: DataSourceConstructor = class<TCursor, TValue, TQuery>
     implements DataSource<TCursor, TValue, TQuery>
 {
     readonly #unfinalized: boolean
     readonly #read: (request: DataReadRequest<TCursor, TQuery>) => AsyncIterable<DataMessage<TCursor, TValue>>
     readonly #cursorUtils: DataCursorUtils<TCursor>
+
+    #locked: boolean
 
     get unfinalized() {
         return this.#unfinalized
@@ -355,10 +295,49 @@ export const DataSource: DataSourceConstructor = class<TCursor, TValue, TQuery>
         this.#unfinalized = config.unfinalized ?? true
         this.#read = config.read
         this.#cursorUtils = config.cursorUtils
+        this.#locked = false
     }
 
-    read(request: DataReadRequest<TCursor, TQuery>): AsyncIterable<DataMessage<TCursor, TValue>> {
-        return this.#read(request)
+    async *read(
+        request: DataReadRequest<TCursor, TQuery> = {cursor: undefined},
+    ): AsyncIterable<DataMessage<TCursor, TValue>> {
+        if (this.#locked) {
+            throw new TypeError('Cannot read from a locked DataSource')
+        }
+
+        this.#locked = true
+        try {
+            let offset = request.cursor
+
+            for await (const message of this.#read(request)) {
+                switch (message.type) {
+                    case 'batch': {
+                        const batch = message
+
+                        if (!this.unfinalized && !batch.finalizedHead) {
+                            throw new TypeError('Finalized source data must have a finalized head')
+                        }
+
+                        offset = batch.cursor
+                        break
+                    }
+                    case 'fork': {
+                        if (!this.unfinalized) {
+                            throw new RangeError('Got fork message from finalized DataSource')
+                        }
+                        // FIXME: should we force exit on fork?
+                        return
+                    }
+                    default: {
+                        throw unexpectedCase((message as any).type)
+                    }
+                }
+
+                yield message
+            }
+        } finally {
+            this.#locked = false
+        }
     }
 
     pipe<TReturn>(
@@ -400,114 +379,221 @@ export const DataSource: DataSourceConstructor = class<TCursor, TValue, TQuery>
         return this.pipe(createFinalizer(), {})
     }
 
-    [Symbol.asyncIterator](opts?: DataReadRequest<TCursor, TQuery>): AsyncIterable<TValue> {
-        return pipe(
-            this,
-            {
-                unfinalized: this.#unfinalized,
-                write: async function* (streamOpts: DataWriteContext<TCursor, TValue, TQuery>) {
-                    for await (const message of streamOpts.read(
-                        (opts ?? {cursor: undefined, request: undefined}) as DataReadRequest<TCursor, TQuery>,
-                    )) {
-                        switch (message.type) {
-                            case 'batch':
-                                yield* message.data.map((item) => item.value)
-                                break
-                            case 'fork':
-                                throw new ForkException(message.cursors)
-                            default:
-                                throw unexpectedCase((message as any).type)
-                        }
-                    }
-                },
-            },
-            {},
-        )
+    async *[Symbol.asyncIterator](opts?: DataReadRequest<TCursor, TQuery>) {
+        for await (const message of this.read(opts)) {
+            if (message.type === 'fork') {
+                throw new ForkException(message.cursors)
+            }
+
+            for (const item of message.data) {
+                yield item.value
+            }
+        }
+    }
+}
+
+/**
+ * Creates a data source from a configuration object.
+ *
+ * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
+ * @template TValue - The type of data values produced by this source
+ * @template TQuery - The type of additional request parameters accepted by this source at runtime
+ * @param config - Configuration object defining the data source behavior
+ * @returns A configured DataSource instance
+ */
+export function createSource<TCursor, TValue, TQuery>(
+    config: DataSourceConfig<TCursor, TValue, TQuery>,
+): DataSource<TCursor, TValue, TQuery> {
+    return new DataSource(config)
+}
+
+/**
+ * Configuration interface for creating a data target.
+ *
+ * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
+ * @template TValue - The type of data values consumed by this target
+ * @template TQuery - The type of additional request parameters to be passed back to the data source
+ * @template TReturn - The return type of the write operation
+ */
+export interface DataTargetConfig<TCursor, TValue, TQuery, TReturn> {
+    /** Whether this target can handle unfinalized data */
+    unfinalized?: boolean
+    /**
+     * Function to write data obtained from the provided context.
+     */
+    write(context: DataWriteContext<TCursor, TValue, TQuery>): TReturn
+}
+
+export interface DataTargetConstructor {
+    new <TCursor, TValue, TQuery, TReturn>(
+        config: DataTargetConfig<TCursor, TValue, TQuery, TReturn>,
+    ): DataTarget<TCursor, TValue, TQuery, TReturn>
+}
+
+export const DataTarget: DataTargetConstructor = class<TCursor, TValue, TQuery, TReturn>
+    implements DataTarget<TCursor, TValue, TQuery, TReturn>
+{
+    readonly #unfinalized: boolean
+    readonly #write: (context: DataWriteContext<TCursor, TValue, TQuery>) => TReturn
+
+    #locked: boolean
+
+    get unfinalized() {
+        return this.#unfinalized
+    }
+
+    constructor(config: DataTargetConfig<TCursor, TValue, TQuery, TReturn>) {
+        this.#unfinalized = config.unfinalized ?? true
+        this.#write = config.write
+        this.#locked = false
+    }
+
+    async *#wrapRead(
+        read: (request: DataReadRequest<TCursor, TQuery>) => AsyncIterable<DataMessage<TCursor, TValue>>,
+        request: DataReadRequest<TCursor, TQuery>,
+    ): AsyncIterable<DataMessage<TCursor, TValue>> {
+        this.#locked = true
+        try {
+            for await (const message of read(request)) {
+                if (message.type === 'fork' && !this.#unfinalized) {
+                    throw new RangeError('Got fork message for finalized DataTarget')
+                }
+                yield message
+            }
+        } finally {
+            this.#locked = false
+        }
+    }
+
+    write(context: DataWriteContext<TCursor, TValue, TQuery>): TReturn {
+        if (this.#locked) {
+            throw new TypeError('Cannot write to a locked DataTarget')
+        }
+
+        return this.#write({
+            cursorUtils: context.cursorUtils,
+            read: (request) => this.#wrapRead(context.read, request),
+        })
+    }
+}
+
+/**
+ * Creates a data target from a configuration object.
+ *
+ * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
+ * @template TValue - The type of data values consumed by this target
+ * @template TQuery - The type of additional request parameters to be passed back to the data source
+ * @template TReturn - The return type of the write operation
+ * @param config - Configuration object defining the data target behavior
+ * @returns A configured DataTarget instance
+ */
+export function createTarget<TCursor, TValue, TQuery, TReturn>(
+    config: DataTargetConfig<TCursor, TValue, TQuery, TReturn>,
+): DataTarget<TCursor, TValue, TQuery, TReturn>
+/**
+ * Creates a data target factory from a factory function.
+ *
+ * @template TCursor - The cursor type that represents a position in the data stream (e.g. block height + hash)
+ * @template TValue - The type of data values consumed by this target
+ * @template TQuery - The type of additional request parameters to be passed back to the data source
+ * @template TReturn - The return type of the write operation
+ * @param factory - Factory function that creates a target configuration based on options
+ * @returns A configured DataTarget factory function
+ */
+export function createTarget<TCursor, TValue, TQuery, TReturn>(
+    factory: (opts: DataTargetFactoryOptions) => DataTargetConfig<TCursor, TValue, TQuery, TReturn>,
+): (opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TQuery, TReturn>
+export function createTarget<TCursor, TValue, TQuery, TReturn>(
+    configOrFactory:
+        | DataTargetConfig<TCursor, TValue, TQuery, TReturn>
+        | ((opts: DataTargetFactoryOptions) => DataTargetConfig<TCursor, TValue, TQuery, TReturn>),
+):
+    | DataTarget<TCursor, TValue, TQuery, TReturn>
+    | ((opts: DataTargetFactoryOptions) => DataTarget<TCursor, TValue, TQuery, TReturn>) {
+    if (typeof configOrFactory === 'function') {
+        return (opts: DataTargetFactoryOptions) => createTarget(configOrFactory(opts))
+    }
+
+    return new DataTarget({
+        unfinalized: configOrFactory.unfinalized ?? true,
+        write: (opts) => configOrFactory.write(opts),
+    })
+}
+
+/**
+ * Validates a data batch against cursor consistency rules.
+ *
+ * @param source - The data source for cursor utilities and finalization status
+ * @param batch - The batch to validate
+ * @param offset - The previous cursor offset
+ */
+function validateBatch<TCursor, TValue, TQuery>(
+    source: DataSource<TCursor, TValue, TQuery>,
+    batch: DataBatchMessage<TCursor, TValue>,
+    offset: TCursor | undefined,
+): void {
+    if (offset && !source.cursorUtils.compare(batch.cursor, offset).isGreaterOrEqual) {
+        throw new RangeError('New offset is below the previous offset')
+    }
+
+    if (!source.cursorUtils.compare(batch.head, batch.cursor).isGreaterOrEqual) {
+        throw new RangeError('Head is below the offset')
+    }
+
+    if (!source.unfinalized) {
+        if (!source.cursorUtils.compare(batch.head, batch.finalizedHead as TCursor).isEqual) {
+            throw new RangeError('Head is not equal to the finalized head')
+        }
+    } else if (batch.finalizedHead) {
+        if (!source.cursorUtils.compare(batch.head, batch.finalizedHead).isGreaterOrEqual) {
+            throw new RangeError('Head is below the finalized head')
+        }
+    }
+
+    let lastId = offset
+    for (const item of batch.data) {
+        if (lastId && !source.cursorUtils.compare(item.cursor, lastId).isGreater) {
+            throw new RangeError('Item is below or equal to the previous item')
+        }
+        lastId = item.cursor
+    }
+
+    if (lastId && !source.cursorUtils.compare(batch.cursor, lastId).isGreaterOrEqual) {
+        throw new RangeError('Offset is below the data')
+    }
+
+    if (lastId && !source.cursorUtils.compare(batch.head, lastId).isGreaterOrEqual) {
+        throw new RangeError('Head is below the data')
     }
 }
 
 function pipe<TCursor, TValue, TQuery, TReturn>(
     source: DataSource<TCursor, TValue, TQuery>,
     target: DataTarget<TCursor, TValue, TQuery, TReturn>,
-    opts: DataPipeOptions = {},
-): TReturn {
+    opts?: DataPipeOptions,
+) {
     if (source.unfinalized && !target.unfinalized) {
         throw new TypeError('Cannot pipe from unfinalized DataSource to finalized DataTarget')
     }
 
+    const read = opts?.validateBatches
+        ? async function* (streamOpts: DataReadRequest<TCursor, TQuery>) {
+              for await (const message of source.read(streamOpts)) {
+                  switch (message.type) {
+                      case 'batch':
+                          validateBatch(source, message, streamOpts.cursor)
+                          yield message
+                          break
+                      case 'fork':
+                          yield message
+                          break
+                  }
+              }
+          }
+        : source.read.bind(source)
+
     return target.write({
         cursorUtils: source.cursorUtils,
-        read: async function* (
-            streamOpts: DataReadRequest<TCursor, TQuery>,
-        ): AsyncIterable<DataMessage<TCursor, TValue>> {
-            let offset = streamOpts.cursor
-
-            for await (const message of source.read(streamOpts)) {
-                switch (message.type) {
-                    case 'batch': {
-                        const batch = message
-
-                        if (!source.unfinalized && !batch.finalizedHead) {
-                            throw new TypeError('Finalized source data must have a finalized head')
-                        }
-
-                        if (opts.validateBatches) {
-                            if (offset && !source.cursorUtils.compare(batch.cursor, offset).isGreaterOrEqual) {
-                                throw new RangeError('New offset is below the previous offset')
-                            }
-
-                            if (!source.cursorUtils.compare(batch.head, batch.cursor).isGreaterOrEqual) {
-                                throw new RangeError('Head is below the offset')
-                            }
-
-                            if (!source.unfinalized) {
-                                if (!source.cursorUtils.compare(batch.head, batch.finalizedHead as TCursor).isEqual) {
-                                    throw new RangeError('Head is not equal to the finalized head')
-                                }
-                            } else if (batch.finalizedHead) {
-                                if (!source.cursorUtils.compare(batch.head, batch.finalizedHead).isGreaterOrEqual) {
-                                    throw new RangeError('Head is below the finalized head')
-                                }
-                            }
-
-                            let lastId = offset
-                            for (const item of batch.data) {
-                                if (lastId && !source.cursorUtils.compare(item.cursor, lastId).isGreater) {
-                                    throw new RangeError('Item is below or equal to the previous item')
-                                }
-                                lastId = item.cursor
-                            }
-
-                            if (lastId && !source.cursorUtils.compare(batch.cursor, lastId).isGreaterOrEqual) {
-                                throw new RangeError('Offset is below the data')
-                            }
-
-                            if (lastId && !source.cursorUtils.compare(batch.head, lastId).isGreaterOrEqual) {
-                                throw new RangeError('Head is below the data')
-                            }
-                        }
-
-                        offset = batch.cursor
-
-                        break
-                    }
-                    case 'fork': {
-                        if (!source.unfinalized) {
-                            throw new RangeError('Got fork message from finalized DataSource')
-                        }
-                        if (!target.unfinalized) {
-                            throw new RangeError('Got fork message for finalized DataTarget')
-                        }
-
-                        return
-                    }
-                    default: {
-                        throw unexpectedCase((message as any).type)
-                    }
-                }
-
-                yield message
-            }
-        },
+        read,
     })
 }
