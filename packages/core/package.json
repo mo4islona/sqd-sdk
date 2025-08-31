@@ -503,6 +503,16 @@
                 "types": "./lib/portal/evm/query.d.cts"
             }
         },
+        "./portal/evm/schema": {
+            "import": {
+                "default": "./lib/portal/evm/schema.js",
+                "types": "./lib/portal/evm/schema.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/evm/schema.cjs",
+                "types": "./lib/portal/evm/schema.d.cts"
+            }
+        },
         "./portal": {
             "import": {
                 "default": "./lib/portal/index.js",
@@ -543,6 +553,16 @@
                 "types": "./lib/portal/solana/query.d.cts"
             }
         },
+        "./portal/solana/schema": {
+            "import": {
+                "default": "./lib/portal/solana/schema.js",
+                "types": "./lib/portal/solana/schema.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/solana/schema.cjs",
+                "types": "./lib/portal/solana/schema.d.cts"
+            }
+        },
         "./portal/substrate": {
             "import": {
                 "default": "./lib/portal/substrate/index.js",
@@ -561,6 +581,16 @@
             "require": {
                 "default": "./lib/portal/substrate/query.cjs",
                 "types": "./lib/portal/substrate/query.d.cts"
+            }
+        },
+        "./portal/substrate/schema": {
+            "import": {
+                "default": "./lib/portal/substrate/schema.js",
+                "types": "./lib/portal/substrate/schema.d.ts"
+            },
+            "require": {
+                "default": "./lib/portal/substrate/schema.cjs",
+                "types": "./lib/portal/substrate/schema.d.cts"
             }
         },
         "./validation/composite/array": {
