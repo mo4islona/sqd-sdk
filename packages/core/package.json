@@ -353,36 +353,6 @@
                 "types": "./lib/pipeline/index.d.cts"
             }
         },
-        "./pipeline/tools/filter": {
-            "import": {
-                "default": "./lib/pipeline/tools/filter.js",
-                "types": "./lib/pipeline/tools/filter.d.ts"
-            },
-            "require": {
-                "default": "./lib/pipeline/tools/filter.cjs",
-                "types": "./lib/pipeline/tools/filter.d.cts"
-            }
-        },
-        "./pipeline/tools/finalizer": {
-            "import": {
-                "default": "./lib/pipeline/tools/finalizer.js",
-                "types": "./lib/pipeline/tools/finalizer.d.ts"
-            },
-            "require": {
-                "default": "./lib/pipeline/tools/finalizer.cjs",
-                "types": "./lib/pipeline/tools/finalizer.d.cts"
-            }
-        },
-        "./pipeline/tools/forEach": {
-            "import": {
-                "default": "./lib/pipeline/tools/forEach.js",
-                "types": "./lib/pipeline/tools/forEach.d.ts"
-            },
-            "require": {
-                "default": "./lib/pipeline/tools/forEach.cjs",
-                "types": "./lib/pipeline/tools/forEach.d.cts"
-            }
-        },
         "./pipeline/tools": {
             "import": {
                 "default": "./lib/pipeline/tools/index.js",
@@ -391,36 +361,6 @@
             "require": {
                 "default": "./lib/pipeline/tools/index.cjs",
                 "types": "./lib/pipeline/tools/index.d.cts"
-            }
-        },
-        "./pipeline/tools/mapper": {
-            "import": {
-                "default": "./lib/pipeline/tools/mapper.js",
-                "types": "./lib/pipeline/tools/mapper.d.ts"
-            },
-            "require": {
-                "default": "./lib/pipeline/tools/mapper.cjs",
-                "types": "./lib/pipeline/tools/mapper.d.cts"
-            }
-        },
-        "./pipeline/tools/reducer": {
-            "import": {
-                "default": "./lib/pipeline/tools/reducer.js",
-                "types": "./lib/pipeline/tools/reducer.d.ts"
-            },
-            "require": {
-                "default": "./lib/pipeline/tools/reducer.cjs",
-                "types": "./lib/pipeline/tools/reducer.d.cts"
-            }
-        },
-        "./pipeline/tools/scanner": {
-            "import": {
-                "default": "./lib/pipeline/tools/scanner.js",
-                "types": "./lib/pipeline/tools/scanner.d.ts"
-            },
-            "require": {
-                "default": "./lib/pipeline/tools/scanner.cjs",
-                "types": "./lib/pipeline/tools/scanner.d.cts"
             }
         },
         "./pipeline/tools/tracker": {

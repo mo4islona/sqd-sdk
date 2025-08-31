@@ -1,12 +1,12 @@
 import {createLogger, type Logger} from '@belopash/core/logger'
-import {assert, assertNotNull, maybeLast} from '@belopash/core/internal/misc'
+import {assert, assertNotNull, last, maybeLast} from '@belopash/core/internal/misc'
 import {DataSource, type EntityManager} from 'typeorm'
 import {Store} from './store'
 import {StateManager} from './utils/stateManager'
 import {createOrmConfig} from '@subsquid/typeorm-config'
 import {ChangeTracker, rollbackBlock} from './utils/hot'
 import type {DatabaseState, HashAndHeight} from './interfaces'
-import {createTarget, type DataBatchMessage, type DataForkMessage} from '@belopash/core/pipeline'
+import {createTarget, type DataDataMessage, type DataForkMessage} from '@belopash/core/pipeline'
 
 export type IsolationLevel = 'SERIALIZABLE' | 'READ COMMITTED' | 'REPEATABLE READ'
 
@@ -130,9 +130,9 @@ export class TypeormDatabase {
     }
 
     transact(
-        batch: DataBatchMessage<HashAndHeight, unknown>,
+        batch: DataDataMessage<HashAndHeight, unknown>,
         cb: (store: Store, sliceBeg: number, sliceEnd: number) => Promise<void>,
-    ): Promise<HashAndHeight> {
+    ): Promise<void> {
         return this.submit(async (em) => {
             let state = await this.getState(em)
 
@@ -166,10 +166,12 @@ export class TypeormDatabase {
                     )
                 }
 
-                await this.updateStatus(em, state.nonce, batch.finalizedHead ?? batch.data[unfinalizedIndex - 1].cursor)
+                await this.updateStatus(
+                    em,
+                    state.nonce,
+                    batch.data[unfinalizedIndex - 1]?.cursor ?? batch.finalizedHead ?? state,
+                )
             }
-
-            return batch.cursor
         })
     }
 
@@ -183,7 +185,7 @@ export class TypeormDatabase {
                 await rollbackBlock(this.statusSchema, em, chain[i].number)
             }
 
-            return chain[chain.length - 1]
+            return last(chain)
         })
     }
 
@@ -300,7 +302,7 @@ function assertChainContinuity(base: HashAndHeight, chain: HashAndHeight[]) {
 
 export function createTypeormTarget<TValue>(
     databaseOpts: TypeormDatabaseOptions,
-    handler: (store: Store, batch: TValue[]) => Promise<void>,
+    handler: (store: Store, batch: TValue) => Promise<void>,
 ) {
     return createTarget<HashAndHeight, TValue, never, Promise<void>>({
         unfinalized: true,
@@ -312,13 +314,12 @@ export function createTypeormTarget<TValue>(
             async function process(cursor: HashAndHeight | undefined) {
                 for await (const message of read({cursor})) {
                     switch (message.type) {
-                        case 'batch': {
-                            await db.transact(message, (store, sliceBeg, sliceEnd) =>
-                                handler(
-                                    store,
-                                    message.data.slice(sliceBeg, sliceEnd).map((d) => d.value),
-                                ),
-                            )
+                        case 'data': {
+                            await db.transact(message, async (store, sliceBeg, sliceEnd) => {
+                                for (let items of message.data.slice(sliceBeg, sliceEnd)) {
+                                    await handler(store, items.value)
+                                }
+                            })
                             break
                         }
                         case 'fork': {

@@ -18,7 +18,9 @@ export interface SolanaPortalDataReaderOptions<F extends FieldSelection> {
     range?: Range
 }
 
-export function solanaPortalDataSource<F extends FieldSelection>(options: SolanaPortalDataReaderOptions<F>) {
+export type SolanaData<F extends FieldSelection> = Block<F>[]
+
+export function createSolanaPortalSource<F extends FieldSelection>(options: SolanaPortalDataReaderOptions<F>) {
     let baseQuery = mergeRangeRequests(options.query ?? [], mergeDataRequests)
     if (options.range) {
         baseQuery = applyRangeBound(baseQuery, options.range)
@@ -27,7 +29,7 @@ export function solanaPortalDataSource<F extends FieldSelection>(options: Solana
     const createBlockStream = async function* (
         cursor?: BlockRef,
         query?: SolanaDataRequestRange[],
-    ): AsyncIterableIterator<DataMessage<BlockRef, Block<F>>> {
+    ): AsyncIterableIterator<DataMessage<BlockRef, SolanaData<F>>> {
         const requestsBounded = cursor
             ? applyRangeBound(query ? mergeRangeRequests([...baseQuery, ...query], mergeDataRequests) : baseQuery, {
                   from: cursor.number + 1,
@@ -48,31 +50,7 @@ export function solanaPortalDataSource<F extends FieldSelection>(options: Solana
                 },
             })
 
-            for await (const message of portalSource.read({cursor})) {
-                switch (message.type) {
-                    case 'batch': {
-                        yield {
-                            type: 'batch',
-                            data: message.data.map((i) => {
-                                const value = createBlock<F>(i.value)
-
-                                return {
-                                    cursor: i.cursor,
-                                    value,
-                                }
-                            }),
-                            finalizedHead: message.finalizedHead,
-                            head: message.head,
-                            cursor: message.cursor,
-                        }
-                        break
-                    }
-                    case 'fork': {
-                        yield message
-                        break
-                    }
-                }
-            }
+            yield* portalSource.map((i) => i.map((i) => createBlock<F>(i))).read({cursor})
         }
     }
 

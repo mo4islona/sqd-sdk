@@ -1,4 +1,4 @@
-process: migrate
+process:
 	@npx node -r dotenv/config --unhandled-rejections=strict lib/main.js
 
 

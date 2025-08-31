@@ -1,7 +1,6 @@
-import {last, maybeLast} from '../internal/misc'
+import {maybeLast} from '../internal/misc'
 import {Throttler} from '../internal/throttler'
-import {type DataMessage, createSource, type DataSource} from '../pipeline'
-import {BlockRefUtils} from '../pipeline/block'
+import {type DataMessage, createSource, type DataSource, type DataItem, BlockRefUtils} from '../pipeline'
 import {type BlockRef, PortalClient, type PortalClientOptions, isForkException} from './client'
 import type {GetBlock, Query} from './query'
 
@@ -15,7 +14,65 @@ function calculateHead(portalHead: BlockRef, lastBlock: BlockRef | undefined): B
     return BlockRefUtils.compare(lastBlock, portalHead).isGreater ? lastBlock : portalHead
 }
 
-export type PortalData<TQuery extends Query> = GetBlock<TQuery>
+function createBlockCursor(block: {header: {number: number; hash: string}}): BlockRef {
+    return {
+        number: block.header.number,
+        hash: block.header.hash,
+    }
+}
+
+function findUnfinalizedBlockIndex(
+    blocks: {header: {number: number; hash: string}}[],
+    finalizedHead: BlockRef,
+): number {
+    const index = blocks.findIndex((block) => BlockRefUtils.compare(createBlockCursor(block), finalizedHead).isGreater)
+    return index < 0 ? blocks.length : index
+}
+
+function* processUnfinalizedBlocks<TQuery extends Query>(
+    blocks: GetBlock<TQuery>[],
+    unfinalizedStartIndex: number,
+): IterableIterator<DataItem<BlockRef, PortalData<TQuery>>> {
+    for (let i = unfinalizedStartIndex; i < blocks.length; i++) {
+        const block = blocks[i]
+        const cursor = createBlockCursor(block)
+        yield {value: [block], cursor}
+    }
+}
+
+function processBlockBatch<TQuery extends Query>(
+    blocks: GetBlock<TQuery>[],
+    finalizedHead?: BlockRef,
+): DataItem<BlockRef, PortalData<TQuery>>[] {
+    if (blocks.length === 0) {
+        return []
+    }
+
+    if (!finalizedHead) {
+        return blocks.map((block) => {
+            const cursor = createBlockCursor(block)
+            return {value: [block], cursor}
+        })
+    }
+
+    const unfinalizedStartIndex = findUnfinalizedBlockIndex(blocks, finalizedHead)
+    const dataItems: DataItem<BlockRef, PortalData<TQuery>>[] = []
+
+    if (unfinalizedStartIndex > 0) {
+        const finalizedBlocks =
+            unfinalizedStartIndex === blocks.length ? blocks : blocks.slice(0, unfinalizedStartIndex)
+        const lastFinalizedBlock = finalizedBlocks[finalizedBlocks.length - 1]
+        const finalizedCursor = createBlockCursor(lastFinalizedBlock)
+        dataItems.push({value: finalizedBlocks, cursor: finalizedCursor})
+    }
+
+    const unfinalizedItems = processUnfinalizedBlocks(blocks, unfinalizedStartIndex)
+    dataItems.push(...unfinalizedItems)
+
+    return dataItems
+}
+
+export type PortalData<TQuery extends Query> = GetBlock<TQuery>[]
 
 export function portalDataSource<TQuery extends Query>(
     options: PortalDataSourceOptions<TQuery>,
@@ -24,65 +81,60 @@ export function portalDataSource<TQuery extends Query>(
     const headThrottler = new Throttler(async () => portal.getHead(), 5_000)
 
     const createBlockStream = async function* (
-        offset?: BlockRef,
+        resumeFromCursor?: BlockRef,
     ): AsyncIterable<DataMessage<BlockRef, PortalData<TQuery>>> {
         let parentBlockHash: string | undefined
-        let fromBlock = options.query.fromBlock ?? 0
-        if (offset) {
-            fromBlock = Math.max(offset.number + 1, fromBlock)
-            parentBlockHash = fromBlock === offset.number + 1 ? offset.hash : undefined
+        let startBlockNumber = options.query.fromBlock ?? 0
+
+        if (resumeFromCursor) {
+            startBlockNumber = Math.max(resumeFromCursor.number + 1, startBlockNumber)
+            parentBlockHash = startBlockNumber === resumeFromCursor.number + 1 ? resumeFromCursor.hash : undefined
         }
-        const toBlock = options.query.toBlock
+
+        const endBlockNumber = options.query.toBlock
 
         const streamQuery = {
             ...options.query,
-            fromBlock,
+            fromBlock: startBlockNumber,
             parentBlockHash,
-            toBlock,
+            toBlock: endBlockNumber,
         }
 
         try {
-            let lastCursor = offset
+            let lastProcessedCursor = resumeFromCursor
 
-            for await (const batch of portal.getStream(streamQuery)) {
-                const portalHead = await headThrottler.get()
-                if (!portalHead) continue // no data?
+            for await (const blockBatch of portal.getStream(streamQuery)) {
+                const currentPortalHead = await headThrottler.get()
+                if (!currentPortalHead) continue
 
-                const data = batch.blocks.map((value) => ({
-                    value,
-                    cursor: {number: value.header.number, hash: value.header.hash},
-                }))
+                const processedDataItems = processBlockBatch(blockBatch.blocks, blockBatch.finalizedHead)
 
-                const cursor = maybeLast(data)?.cursor ?? lastCursor
-                if (!cursor) continue
-
-                const head = calculateHead(portalHead, cursor)
-                const finalizedHead = batch.finalizedHead
+                const effectiveHead = calculateHead(currentPortalHead, maybeLast(processedDataItems)?.cursor)
+                const batchFinalizedHead = blockBatch.finalizedHead
 
                 yield {
-                    type: 'batch',
-                    cursor: cursor,
-                    head,
-                    finalizedHead,
-                    data,
+                    type: 'data',
+                    head: effectiveHead,
+                    finalizedHead: batchFinalizedHead,
+                    data: processedDataItems,
                 }
 
-                lastCursor = cursor
+                lastProcessedCursor = maybeLast(processedDataItems)?.cursor ?? lastProcessedCursor
             }
-        } catch (err) {
-            if (isForkException(err)) {
+        } catch (error) {
+            if (isForkException(error)) {
                 yield {
                     type: 'fork',
-                    cursors: err.lastBlocks,
+                    cursors: error.lastBlocks,
                 }
             }
-            throw err
+            throw error
         }
     }
 
     return createSource({
         unfinalized: true,
         cursorUtils: BlockRefUtils,
-        read: (opts) => createBlockStream(opts.cursor),
+        read: (readOptions) => createBlockStream(readOptions.cursor),
     })
 }

@@ -1,9 +1,9 @@
 import {HttpClient} from '@belopash/core/http-client'
-import {assert} from '@belopash/core/internal/misc'
+import {assert, maybeLast} from '@belopash/core/internal/misc'
 import {createLogger} from '@belopash/core/logger'
-import {createTracker, createMapper} from '@belopash/core/pipeline'
+import {createTracker} from '@belopash/core/pipeline'
 import {PortalClient} from '@belopash/core/portal'
-import {solanaPortalDataSource, SolanaQueryBuilder} from '@belopash/solana-stream'
+import {createSolanaPortalSource, SolanaQueryBuilder} from '@belopash/solana-stream'
 import {createTypeormTarget} from '@belopash/typeorm-target/database'
 import * as tokenProgram from './abi/token-program'
 import * as whirlpool from './abi/whirlpool'
@@ -37,7 +37,7 @@ async function main() {
         })
         .build()
 
-    await solanaPortalDataSource({
+    await createSolanaPortalSource({
         portal,
         fields: {
             block: {number: true, timestamp: true, hash: true, parentHash: true},
@@ -63,14 +63,6 @@ async function main() {
         query: whirlpoolQuery,
     })
         //.pipe(createFinalizer())
-        .pipe(
-            createMapper((block) => {
-                return {
-                    ...block,
-                    mapped: true,
-                }
-            }),
-        )
         .pipe(createProgressTracker('solana'))
         .pipe(
             createTypeormTarget({}, async (store, batch) => {
@@ -126,7 +118,7 @@ async function main() {
 
 export function createProgressTracker<
     TCursor extends {number: number; hash: string},
-    TValue extends {header: {timestamp: number}},
+    TValue extends {header: {timestamp: number}}[],
     TQuery,
 >(prefix: string) {
     const logger = createLogger(`sqd:${prefix}`)
@@ -134,7 +126,7 @@ export function createProgressTracker<
     const writeTimer = createTimer()
     const logIntervalMs = 5_000
     const emitLog = () => {
-        if (!stats?.cursor) return
+        if (!stats?.cursor || !stats.head) return
         const now = Date.now()
         const headNumber = stats.head?.number ?? stats.cursor.number
         const finalizedNumber = stats.finalizedHead?.number
@@ -176,7 +168,7 @@ export function createProgressTracker<
 
     let stats:
         | {
-              cursor: TCursor
+              cursor: TCursor | undefined
               head: TCursor | undefined
               finalizedHead: TCursor | undefined
               lastBlockTime: number | undefined
@@ -197,11 +189,10 @@ export function createProgressTracker<
         | undefined = undefined
 
     return createTracker<TCursor, TValue, TQuery>({
-        beforeRead: (cursor) => {
-            if (!stats && cursor) {
-                logger.info(`continue from ${cursor.number}`)
+        beforeRead: () => {
+            if (!stats) {
                 stats = {
-                    cursor,
+                    cursor: undefined,
                     head: undefined,
                     finalizedHead: undefined,
                     lastBlockTime: undefined,
@@ -209,7 +200,7 @@ export function createProgressTracker<
                     avgWriteTime: undefined,
                     lastReadTime: undefined,
                     lastWriteTime: undefined,
-                    startNumber: cursor.number,
+                    startNumber: undefined,
                     startTimeMs: Date.now(),
                     targetNumber: undefined,
                     lastLogTimeMs: Date.now(),
@@ -237,13 +228,16 @@ export function createProgressTracker<
         afterWrite: (message) => {
             if (!stats) return
 
+            const lastItem = maybeLast(message.data)
+            const lastBlock = lastItem ? maybeLast(lastItem.value) : undefined
+
             const elapsed = writeTimer.stop()
             stats.avgWriteTime = stats.avgWriteTime == null ? elapsed : (stats.avgWriteTime + elapsed) / 2
             stats.lastWriteTime = elapsed
-            stats.lastBlockTime = message.data[message.data.length - 1].value.header.timestamp * 1000
+            stats.lastBlockTime = (lastBlock?.header.timestamp ?? 0) * 1000
             stats.head = message.head
             stats.finalizedHead = message.finalizedHead
-            stats.cursor = message.cursor
+            stats.cursor = lastItem?.cursor ?? stats.cursor
             if (stats.targetNumber == null) {
                 stats.targetNumber = message.finalizedHead?.number ?? message.head.number
             }

@@ -1,7 +1,6 @@
-import {unexpectedCase} from '../internal/misc'
+import {last, maybeLast} from '../internal/misc'
 import type {DataCursorUtils} from './cursor'
 import {ForkException} from './errors'
-import {createFinalizer, createMapper, createFilter, createScanner, createReducer, createForEach} from './tools'
 
 /**
  * Represents a single data item with its associated cursor position.
@@ -9,7 +8,7 @@ import {createFinalizer, createMapper, createFilter, createScanner, createReduce
  * @template TCursor - The cursor type that represents a position in the data stream (e.g. block number + hash)
  * @template TValue - The actual data value
  */
-export interface DataBatchItem<TCursor, TValue> {
+export interface DataItem<TCursor, TValue> {
     cursor: TCursor
     value: TValue
 }
@@ -22,15 +21,13 @@ export interface DataBatchItem<TCursor, TValue> {
  * @template TCursor - The cursor type that represents a position in the data stream (e.g. block number + hash)
  * @template TValue - The type of data values in the batch
  */
-export interface DataBatchMessage<TCursor, TValue> {
-    type: 'batch'
-    /** The cursor position at the end of this batch (inclusive) */
-    cursor: TCursor
+export interface DataDataMessage<TCursor, TValue> {
+    type: 'data'
     /** The highest cursor position in the whole data stream */
     head: TCursor
     /** The highest cursor position that corresponds to final data, if available */
-    finalizedHead?: TCursor
-    data: DataBatchItem<TCursor, TValue>[]
+    finalizedHead: TCursor | undefined
+    data: DataItem<TCursor, TValue>[]
 }
 
 /**
@@ -50,7 +47,7 @@ export interface DataForkMessage<TCursor> {
 /**
  * Union type representing possible data messages in the pipeline.
  */
-export type DataMessage<TCursor, TValue> = DataBatchMessage<TCursor, TValue> | DataForkMessage<TCursor>
+export type DataMessage<TCursor, TValue> = DataDataMessage<TCursor, TValue> | DataForkMessage<TCursor>
 
 /**
  * Runtime options for reading data from a data source. Are typically passed by
@@ -97,8 +94,7 @@ export interface DataTargetFactoryOptions {
  * Configuration options for pipe operations.
  */
 export interface DataPipeOptions<TCursor, TQuery> {
-    /** Whether to validate batch ordering and cursor consistency (default: false) */
-    validateBatches?: boolean
+    validateMessages?: boolean
 }
 
 /**
@@ -227,7 +223,7 @@ export interface DataTarget<TCursor, TValue, TQuery, TReturn> {
     unfinalized: boolean
 
     /** Writes data obtained from the provided context */
-    write(context: DataWriteContext<TCursor, TValue, TQuery>): TReturn
+    write(context: DataWriteContext<TCursor, TValue, TQuery>, opts?: DataPipeOptions<TCursor, TQuery>): TReturn
 }
 
 /**
@@ -247,6 +243,8 @@ export type DataDuplex<TInputCursor, TOutputCursor, TInputValue, TOutputValue, T
     TInpuTQuery,
     DataSource<TOutputCursor, TOutputValue, TOutpuTQuery>
 >
+
+export type DataPassThrough<TCursor, TValue, TQuery> = DataDuplex<TCursor, TCursor, TValue, TValue, TQuery, TQuery>
 
 /**
  * Configuration interface for creating a data source.
@@ -289,7 +287,6 @@ export const DataSource: DataSourceConstructor = class<TCursor, TValue, TQuery>
     readonly #unfinalized: boolean
     readonly #read: (request: DataReadRequest<TCursor, TQuery>) => AsyncIterable<DataMessage<TCursor, TValue>>
     readonly #cursorUtils: DataCursorUtils<TCursor>
-
     #locked: boolean
 
     get unfinalized() {
@@ -316,34 +313,7 @@ export const DataSource: DataSourceConstructor = class<TCursor, TValue, TQuery>
 
         this.#locked = true
         try {
-            let offset = request.cursor
-
-            for await (const message of this.#read(request)) {
-                switch (message.type) {
-                    case 'batch': {
-                        const batch = message
-
-                        if (!this.unfinalized && !batch.finalizedHead) {
-                            throw new TypeError('Finalized source data must have a finalized head')
-                        }
-
-                        offset = batch.cursor
-                        break
-                    }
-                    case 'fork': {
-                        if (!this.unfinalized) {
-                            throw new RangeError('Got fork message from finalized DataSource')
-                        }
-                        // FIXME: should we force exit on fork?
-                        return
-                    }
-                    default: {
-                        throw unexpectedCase((message as any).type)
-                    }
-                }
-
-                yield message
-            }
+            yield* validateMessages(this.#unfinalized, this.#cursorUtils, this.#read, request)
         } finally {
             this.#locked = false
         }
@@ -358,41 +328,186 @@ export const DataSource: DataSourceConstructor = class<TCursor, TValue, TQuery>
         const target =
             typeof targetOrFactory === 'function' ? targetOrFactory({unfinalized: this.#unfinalized}) : targetOrFactory
 
-        return pipe(this, target, opts)
+        if (this.unfinalized && !target.unfinalized) {
+            throw new TypeError('Cannot pipe from unfinalized DataSource to finalized DataTarget')
+        }
+
+        return target.write(
+            {
+                cursorUtils: this.cursorUtils,
+                read: this.read.bind(this),
+            },
+            {...opts, validateMessages: false},
+        )
     }
 
-    map<UValue>(fn: (value: TValue) => UValue): DataSource<TCursor, UValue, TQuery> {
-        return this.pipe(createMapper(fn), {validateBatches: false})
+    map<UValue>(mapper: (value: TValue) => UValue): DataSource<TCursor, UValue, TQuery> {
+        const self = this
+        return createSource<TCursor, UValue, TQuery>({
+            unfinalized: this.#unfinalized,
+            cursorUtils: this.#cursorUtils,
+            read: async function* (readOpts: DataReadRequest<TCursor, TQuery>) {
+                for await (const message of self.read(readOpts)) {
+                    if (message.type === 'data') {
+                        yield {
+                            type: 'data',
+                            head: message.head,
+                            finalizedHead: message.finalizedHead,
+                            data: message.data.map((d: DataItem<TCursor, TValue>) => ({
+                                cursor: d.cursor,
+                                value: mapper(d.value),
+                            })),
+                        }
+                    } else {
+                        yield message
+                    }
+                }
+            },
+        })
     }
 
     filter(predicate: (value: TValue) => boolean): DataSource<TCursor, TValue, TQuery> {
-        return this.pipe(createFilter(predicate), {validateBatches: false})
+        const self = this
+        return createSource<TCursor, TValue, TQuery>({
+            unfinalized: this.#unfinalized,
+            cursorUtils: this.#cursorUtils,
+            read: async function* (readOpts: DataReadRequest<TCursor, TQuery>) {
+                for await (const message of self.read(readOpts)) {
+                    if (message.type === 'data') {
+                        yield {
+                            type: 'data',
+                            head: message.head,
+                            finalizedHead: message.finalizedHead,
+                            data: message.data.filter((d) => predicate(d.value)),
+                        }
+                    } else {
+                        yield message
+                    }
+                }
+            },
+        })
     }
 
     scan<UValue>(
         reducer: (accumulator: UValue, value: TValue) => UValue,
         initialValue: UValue,
     ): DataSource<TCursor, UValue, TQuery> {
-        return this.pipe(createScanner(reducer, initialValue), {validateBatches: false})
+        const self = this
+        return createSource<TCursor, UValue, TQuery>({
+            unfinalized: this.#unfinalized,
+            cursorUtils: this.#cursorUtils,
+            read: async function* (readOpts: DataReadRequest<TCursor, TQuery>) {
+                let accumulator = initialValue
+                for await (const message of self.read(readOpts)) {
+                    if (message.type === 'data') {
+                        yield {
+                            type: 'data',
+                            head: message.head,
+                            finalizedHead: message.finalizedHead,
+                            data: message.data.map((d) => {
+                                accumulator = reducer(accumulator, d.value)
+                                return {cursor: d.cursor, value: accumulator}
+                            }),
+                        }
+                    } else {
+                        accumulator = initialValue
+                        yield message
+                    }
+                }
+            },
+        })
+    }
+
+    finalize(): DataSource<TCursor, TValue, TQuery> {
+        const self = this
+        const cursorUtils = this.#cursorUtils
+        return createSource<TCursor, TValue, TQuery>({
+            unfinalized: false,
+            cursorUtils: this.#cursorUtils,
+            read: async function* (readOpts: DataReadRequest<TCursor, TQuery>) {
+                let finalizedCursor: TCursor | undefined
+                let buffer: DataItem<TCursor, TValue>[] = []
+
+                for await (const message of self.read(readOpts)) {
+                    if (message.type === 'fork') {
+                        const unfinalizedChain = buffer.map((item: DataItem<TCursor, TValue>) => item.cursor)
+                        const currentChain = finalizedCursor ? [finalizedCursor, ...unfinalizedChain] : unfinalizedChain
+                        const rollbackIndex = findRollbackIndex(currentChain, message.cursors, cursorUtils)
+
+                        if (rollbackIndex < 0) {
+                            throw new Error('Unable to process fork')
+                        }
+
+                        buffer = buffer.slice(finalizedCursor ? 1 : 0, rollbackIndex + 1)
+                        continue
+                    }
+
+                    if (!message.finalizedHead) continue
+
+                    const mergedData = buffer.length > 0 ? [...buffer, ...message.data] : message.data
+                    const unfinalizedIndex = mergedData.findIndex(
+                        (item: DataItem<TCursor, TValue>) =>
+                            cursorUtils.compare(item.cursor, message.finalizedHead!).isGreater,
+                    )
+
+                    if (unfinalizedIndex < 0) {
+                        buffer = []
+                        yield {
+                            type: 'data',
+                            finalizedHead: message.finalizedHead,
+                            head: message.finalizedHead,
+                            data: mergedData,
+                        }
+                        finalizedCursor = maybeLast(mergedData)?.cursor ?? finalizedCursor
+                        continue
+                    }
+
+                    const finalizedData = mergedData.slice(0, unfinalizedIndex)
+                    buffer = mergedData.slice(unfinalizedIndex)
+
+                    if (finalizedData.length > 0) {
+                        yield {
+                            type: 'data',
+                            finalizedHead: message.finalizedHead,
+                            head: message.finalizedHead,
+                            data: finalizedData,
+                        }
+                        finalizedCursor = maybeLast(finalizedData)?.cursor ?? finalizedCursor
+                    }
+                }
+            },
+        })
     }
 
     async reduce<UValue>(
         reducer: (accumulator: UValue, value: TValue) => UValue,
         initialValue: UValue,
-        opts?: DataPipeOptions<TCursor, TQuery>,
     ): Promise<UValue> {
-        return this.pipe(createReducer(reducer, initialValue), opts)
+        let accumulator = initialValue
+
+        for await (const message of this.read({cursor: undefined})) {
+            if (message.type === 'fork') {
+                throw new ForkException(message.cursors)
+            }
+
+            for (const item of message.data) {
+                accumulator = reducer(accumulator, item.value)
+            }
+        }
+
+        return accumulator
     }
 
-    async forEach(
-        callback: (value: TValue) => void | Promise<void>,
-        opts?: DataPipeOptions<TCursor, TQuery>,
-    ): Promise<void> {
-        return this.pipe(createForEach(callback), opts)
-    }
+    async forEach(callback: (value: TValue) => void | Promise<void>): Promise<void> {
+        for await (const message of this.read({cursor: undefined})) {
+            if (message.type === 'fork') {
+                throw new ForkException(message.cursors)
+            }
 
-    finalize(): DataSource<TCursor, TValue, TQuery> {
-        return this.pipe(createFinalizer(), {})
+            for (const item of message.data) {
+                await callback(item.value)
+            }
+        }
     }
 
     async *[Symbol.asyncIterator](opts?: DataReadRequest<TCursor, TQuery>) {
@@ -464,31 +579,25 @@ export const DataTarget: DataTargetConstructor = class<TCursor, TValue, TQuery, 
         this.#locked = false
     }
 
-    async *#wrapRead(
-        read: (request: DataReadRequest<TCursor, TQuery>) => AsyncIterable<DataMessage<TCursor, TValue>>,
-        request: DataReadRequest<TCursor, TQuery>,
-    ): AsyncIterable<DataMessage<TCursor, TValue>> {
-        this.#locked = true
-        try {
-            for await (const message of read(request)) {
-                if (message.type === 'fork' && !this.#unfinalized) {
-                    throw new RangeError('Got fork message for finalized DataTarget')
-                }
-                yield message
-            }
-        } finally {
-            this.#locked = false
-        }
-    }
-
-    write(context: DataWriteContext<TCursor, TValue, TQuery>): TReturn {
+    write(context: DataWriteContext<TCursor, TValue, TQuery>, opts?: DataPipeOptions<TCursor, TQuery>): TReturn {
         if (this.#locked) {
             throw new TypeError('Cannot write to a locked DataTarget')
         }
 
+        const self = this
         return this.#write({
             cursorUtils: context.cursorUtils,
-            read: (request) => this.#wrapRead(context.read, request),
+            read: async function* (request) {
+                try {
+                    if (opts?.validateMessages) {
+                        yield* validateMessages(self.#unfinalized, context.cursorUtils, context.read, request)
+                    } else {
+                        yield* context.read(request)
+                    }
+                } finally {
+                    self.#locked = false
+                }
+            },
         })
     }
 }
@@ -536,80 +645,104 @@ export function createTarget<TCursor, TValue, TQuery, TReturn>(
     })
 }
 
-/**
- * Validates a data batch against cursor consistency rules.
- *
- * @param source - The data source for cursor utilities and finalization status
- * @param batch - The batch to validate
- * @param offset - The previous cursor offset
- */
-function validateBatch<TCursor, TValue, TQuery>(
-    source: DataSource<TCursor, TValue, TQuery>,
-    batch: DataBatchMessage<TCursor, TValue>,
-    offset: TCursor | undefined,
+function validateMessage<TCursor, TValue>(
+    unfinalized: boolean,
+    cursorUtils: DataCursorUtils<TCursor>,
+    message: DataMessage<TCursor, TValue>,
+    lastCursor?: TCursor,
 ): void {
-    if (offset && !source.cursorUtils.compare(batch.cursor, offset).isGreaterOrEqual) {
-        throw new RangeError('New offset is below the previous offset')
-    }
-
-    if (!source.cursorUtils.compare(batch.head, batch.cursor).isGreaterOrEqual) {
-        throw new RangeError('Head is below the offset')
-    }
-
-    if (!source.unfinalized) {
-        if (!source.cursorUtils.compare(batch.head, batch.finalizedHead as TCursor).isEqual) {
-            throw new RangeError('Head is not equal to the finalized head')
+    if (message.type === 'data') {
+        if (!unfinalized && !message.finalizedHead) {
+            throw new TypeError('Finalized source data must have a finalized head')
         }
-    } else if (batch.finalizedHead) {
-        if (!source.cursorUtils.compare(batch.head, batch.finalizedHead).isGreaterOrEqual) {
-            throw new RangeError('Head is below the finalized head')
+
+        if (!unfinalized) {
+            if (!cursorUtils.compare(message.head, message.finalizedHead as TCursor).isEqual) {
+                throw new RangeError('Head is not equal to the finalized head')
+            }
+        } else if (message.finalizedHead) {
+            if (!cursorUtils.compare(message.head, message.finalizedHead).isGreaterOrEqual) {
+                throw new RangeError('Head is below the finalized head')
+            }
         }
-    }
 
-    let lastId = offset
-    for (const item of batch.data) {
-        if (lastId && !source.cursorUtils.compare(item.cursor, lastId).isGreater) {
-            throw new RangeError('Item is below or equal to the previous item')
+        let prevCursor = lastCursor
+        for (const item of message.data) {
+            if (prevCursor && !cursorUtils.compare(item.cursor, prevCursor).isGreater) {
+                throw new RangeError('Item is below or equal to the previous item')
+            }
+            prevCursor = item.cursor
         }
-        lastId = item.cursor
-    }
 
-    if (lastId && !source.cursorUtils.compare(batch.cursor, lastId).isGreaterOrEqual) {
-        throw new RangeError('Offset is below the data')
-    }
-
-    if (lastId && !source.cursorUtils.compare(batch.head, lastId).isGreaterOrEqual) {
-        throw new RangeError('Head is below the data')
+        if (prevCursor && !cursorUtils.compare(message.head, prevCursor).isGreaterOrEqual) {
+            throw new RangeError('Head is below the data')
+        }
+    } else if (message.type === 'fork') {
+        let prevCursor: TCursor | undefined = undefined
+        for (const cursor of message.cursors) {
+            if (prevCursor && !cursorUtils.compare(cursor, prevCursor).isGreater) {
+                throw new RangeError('Fork cursor is below the last cursor')
+            }
+            prevCursor = cursor
+        }
     }
 }
 
-function pipe<TCursor, TValue, TQuery, TReturn>(
-    source: DataSource<TCursor, TValue, TQuery>,
-    target: DataTarget<TCursor, TValue, TQuery, TReturn>,
-    opts?: DataPipeOptions<TCursor, TQuery>,
+async function* validateMessages<TCursor, TValue, TQuery>(
+    unfinalized: boolean,
+    cursorUtils: DataCursorUtils<TCursor>,
+    read: (request: DataReadRequest<TCursor, TQuery>) => AsyncIterable<DataMessage<TCursor, TValue>>,
+    request: DataReadRequest<TCursor, TQuery>,
 ) {
-    if (source.unfinalized && !target.unfinalized) {
-        throw new TypeError('Cannot pipe from unfinalized DataSource to finalized DataTarget')
+    let lastCursor = request.cursor
+
+    for await (const message of read(request)) {
+        if (message.type === 'fork' && !unfinalized) {
+            throw new RangeError('Got fork message in finalized pipe')
+        }
+
+        validateMessage(unfinalized, cursorUtils, message, lastCursor)
+
+        if (message.type === 'data' && message.data.length > 0) {
+            lastCursor = last(message.data).cursor
+        }
+
+        yield message
+
+        if (message.type === 'fork') {
+            return // Exit on fork
+        }
+    }
+}
+
+function findRollbackIndex<TId>(currentChain: TId[], forkChain: TId[], cursorUtils: DataCursorUtils<TId>): number {
+    let currentIndex = 0
+    let forkIndex = 0
+    let lastCommonIndex = -1
+
+    while (currentIndex < currentChain.length && forkIndex < forkChain.length) {
+        const currentBlock = currentChain[currentIndex]
+        const forkBlock = forkChain[forkIndex]
+        const cmp = cursorUtils.compare(forkBlock, currentBlock)
+
+        if (cmp.isFork) {
+            return lastCommonIndex
+        }
+
+        if (cmp.isLess) {
+            forkIndex++
+            continue
+        }
+
+        if (cmp.isGreater) {
+            currentIndex++
+            continue
+        }
+
+        lastCommonIndex = currentIndex
+        currentIndex++
+        forkIndex++
     }
 
-    const read = opts?.validateBatches
-        ? async function* (streamOpts: DataReadRequest<TCursor, TQuery>) {
-              for await (const message of source.read(streamOpts)) {
-                  switch (message.type) {
-                      case 'batch':
-                          validateBatch(source, message, streamOpts.cursor)
-                          yield message
-                          break
-                      case 'fork':
-                          yield message
-                          break
-                  }
-              }
-          }
-        : source.read.bind(source)
-
-    return target.write({
-        cursorUtils: source.cursorUtils,
-        read,
-    })
+    return lastCommonIndex
 }

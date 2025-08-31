@@ -2,22 +2,17 @@ import {In} from 'typeorm'
 import {PortalClient} from '@belopash/core/portal'
 import {HttpClient} from '@belopash/core/http-client'
 import {
-    createTarget,
-    createTracker,
     createTransformer,
     DataCursor,
     type BlockRef,
     type DataDuplex,
-    type DataMessage,
     type DataTargetFactoryOptions,
 } from '@belopash/core/pipeline'
-import {createTypeormTarget} from '@belopash/typeorm-target/database'
-import {evmPortalDataSource, EvmQueryBuilder, type Block, type EvmDataRequestRange} from '@belopash/evm-stream'
+import {createEvmPortalSource, EvmQueryBuilder, type Block, type EvmDataRequestRange} from '@belopash/evm-stream'
 import * as factoryAbi from './abi/factory'
 import * as poolAbi from './abi/pool'
 import {Pool, Swap} from './model'
 import type {Store as OrmStore} from '@belopash/typeorm-target'
-import {createLogger} from '@belopash/core/logger'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
@@ -37,7 +32,7 @@ let portal = new PortalClient({
 })
 
 async function main() {
-    await evmPortalDataSource({
+    await createEvmPortalSource({
         portal,
         fields: {
             block: {number: true, timestamp: true, hash: true, parentHash: true},
@@ -53,9 +48,9 @@ async function main() {
         },
     })
         .pipe(createFactoryFilter({address: FACTORY_ADDRESS}))
-        .pipe(createProgressTracker('evm'))
-        .pipe(createLogFlattener())
-        .forEach((item) => console.log(item.id))
+        .map((item) => item.flatMap((i) => i.logs))
+        .scan((acc, item) => acc + item.length, 0)
+        .forEach((count) => console.log(`found ${count} swaps`))
 
     console.log('end')
 }
@@ -67,12 +62,12 @@ function createFactoryFilter<
             topics: true
             data: true
         }
-    }>,
+    }>[],
 >({
     address,
 }: {address: string}): (
     opts: DataTargetFactoryOptions,
-) => DataDuplex<BlockRef, BlockRef, TValue, TValue, EvmDataRequestRange[], never> {
+) => DataDuplex<BlockRef, BlockRef, TValue, TValue[number][], EvmDataRequestRange[], never> {
     const POOL_LIMIT = 4876 // 200KB limit
     const POOLS_FILE = path.join(process.cwd(), 'assets', 'pools.json')
 
@@ -127,7 +122,7 @@ function createFactoryFilter<
     }
 
     const processPoolCreationLogs = (
-        logs: TValue['logs'],
+        logs: TValue[number]['logs'],
         cursor: BlockRef,
         pools: {cursor: BlockRef; value: {poolAddress: string}}[],
     ) => {
@@ -141,17 +136,8 @@ function createFactoryFilter<
         }
     }
 
-    const shouldStopPreindexing = (
-        itemCursor: BlockRef,
-        messageCursor: BlockRef,
-        cursorUtils: any,
-        finalizedHead?: BlockRef,
-    ) => {
-        return (
-            finalizedHead &&
-            (cursorUtils.compare(itemCursor, finalizedHead).isGreater ||
-                cursorUtils.compare(messageCursor, finalizedHead).isGreater)
-        )
+    const shouldStopPreindexing = (itemCursor: BlockRef, cursorUtils: any, finalizedHead?: BlockRef) => {
+        return finalizedHead && cursorUtils.compare(itemCursor, finalizedHead).isGreater
     }
 
     return createTransformer((opts) => {
@@ -163,20 +149,18 @@ function createFactoryFilter<
                 // Preindexing phase
                 console.log('preindexing starting...')
                 for await (const message of opts.read({cursor: preindexedCursor, query: factoryQuery})) {
-                    if (message.type !== 'batch') continue
+                    if (message.type !== 'data') continue
 
                     for (const item of message.data) {
-                        if (
-                            shouldStopPreindexing(item.cursor, message.cursor, opts.cursorUtils, message.finalizedHead)
-                        ) {
+                        if (shouldStopPreindexing(item.cursor, opts.cursorUtils, message.finalizedHead)) {
                             break
                         }
-                        processPoolCreationLogs(item.value.logs, item.cursor, preindexedPools)
+                        for (const block of item.value) {
+                            processPoolCreationLogs(block.logs, item.cursor, preindexedPools)
+                        }
                     }
 
-                    if (
-                        shouldStopPreindexing(message.cursor, message.cursor, opts.cursorUtils, message.finalizedHead)
-                    ) {
+                    if (shouldStopPreindexing(message.head, opts.cursorUtils, message.finalizedHead)) {
                         break
                     }
                 }
@@ -191,7 +175,7 @@ function createFactoryFilter<
                     cursor: readOpts.cursor,
                     query: [...factoryQuery, ...poolsQuery],
                 })) {
-                    if (message.type !== 'batch') {
+                    if (message.type !== 'data') {
                         yield message
                         continue
                     }
@@ -201,18 +185,15 @@ function createFactoryFilter<
                     const data = message.data.map((i) => {
                         return {
                             cursor: i.cursor,
-                            value: {
-                                ...i.value,
-                                logs: i.value.logs.filter(
-                                    (log) => log.address === address || poolsSet.has(log.address),
-                                ),
-                            },
+                            value: i.value.map((b) => ({
+                                ...b,
+                                logs: b.logs.filter((log) => poolsSet.has(log.address)),
+                            })),
                         }
                     })
 
                     yield {
-                        type: 'batch',
-                        cursor: message.cursor,
+                        type: 'data',
                         finalizedHead: message.finalizedHead,
                         head: message.head,
                         data,
@@ -351,199 +332,8 @@ const LogRefUrils = {
     deserialize: (value: unknown) => value as LogRef,
 }
 
-function createLogFlattener<
-    TValue extends Block<{
-        log: {
-            address: true
-            topics: true
-            data: true
-        }
-    }>,
->() {
-    return createTransformer<BlockRef, LogRef, TValue, TValue['logs'][number], unknown, never>((ctx) => {
-        return {
-            cursorUtils: LogRefUrils,
-            read: async function* (req) {
-                for await (let message of ctx.read(req)) {
-                    if (message.type === 'fork') {
-                        yield message
-                        continue
-                    }
-
-                    const flattenedLogs = message.data.flatMap((item) =>
-                        item.value.logs.map((log) => ({
-                            cursor: {...item.cursor, logIndex: log.logIndex},
-                            value: log,
-                        })),
-                    )
-
-                    const filteredLogs =
-                        req.cursor && LogRefUrils.compare(req.cursor, flattenedLogs[0].cursor).isGreaterOrEqual
-                            ? flattenedLogs.filter(
-                                  (item) => LogRefUrils.compare(item.cursor, req.cursor!).isGreaterOrEqual,
-                              )
-                            : flattenedLogs
-
-                    const getEffectiveCursor = (referenceCursor: LogRef) => {
-                        if (filteredLogs.length === 0) return referenceCursor
-                        const lastLogCursor = filteredLogs[filteredLogs.length - 1].cursor
-                        return LogRefUrils.compare(lastLogCursor, referenceCursor).isGreater
-                            ? lastLogCursor
-                            : referenceCursor
-                    }
-
-                    yield {
-                        type: 'batch',
-                        cursor: getEffectiveCursor(message.cursor),
-                        head: getEffectiveCursor(message.head),
-                        finalizedHead: message.finalizedHead,
-                        data: filteredLogs,
-                    }
-                }
-            },
-        }
-    })
-}
-
 function toEntityMap<E extends {id: string}>(entities: E[]): Map<string, E> {
     return new Map(entities.map((e) => [e.id, e]))
-}
-
-export function createProgressTracker<
-    TCursor extends {number: number; hash: string},
-    TValue extends {header: {timestamp: number}},
-    TQuery,
->(prefix: string) {
-    const logger = createLogger(`sqd:${prefix}`)
-    const readTimer = createTimer()
-    const writeTimer = createTimer()
-    const logIntervalMs = 5_000
-    const emitLog = () => {
-        if (!stats?.cursor || !stats.head) return
-        const now = Date.now()
-        const headNumber = stats.head?.number ?? stats.cursor.number
-        const finalizedNumber = stats.finalizedHead?.number
-        const remainingBlocks = Math.max(0, headNumber - stats.cursor.number)
-        const percentVal = (1 - remainingBlocks / headNumber) * 100
-        const percent = Math.max(0, Math.min(100, percentVal))
-        const etaSec =
-            stats.avgBlocksPerSec && stats.avgBlocksPerSec > 0 ? remainingBlocks / stats.avgBlocksPerSec : undefined
-        const percentStr = `${percent.toFixed(2)}%`
-        const etaStr = etaSec == null ? 'n/a' : `${etaSec.toFixed(0)}s`
-
-        // Compute windowed throughput since last log; if nothing happened, it decays to 0
-        const windowMs = now - (stats.lastLogTimeMs ?? now)
-        const windowBlocks = (stats.totalBlocks ?? 0) - (stats.lastLogTotalBlocks ?? 0)
-        const windowBlocksPerSec = windowMs > 0 ? (windowBlocks * 1000) / windowMs : 0
-        stats.avgBlocksPerSec =
-            stats.avgBlocksPerSec == null ? windowBlocksPerSec : (stats.avgBlocksPerSec + windowBlocksPerSec) / 2
-
-        logger.info(
-            {
-                lag: `${((now - (stats.lastBlockTime ?? now)) / 1000).toFixed(2)}s`,
-                batchSize: stats.lastBatchSize ?? 0,
-                blocksPerSec: Number(windowBlocksPerSec.toFixed(2)),
-                avgBlocksPerSec: Number((stats.avgBlocksPerSec ?? 0).toFixed(2)),
-                avgBatchSize: Number((stats.avgBatchSize ?? 0).toFixed(2)),
-                avgReadTime: `${((stats.avgReadTime ?? 0) / 1000).toFixed(2)}s`,
-                lastReadTime: `${((stats.lastReadTime ?? 0) / 1000).toFixed(2)}s`,
-                avgWriteTime: `${((stats.avgWriteTime ?? 0) / 1000).toFixed(2)}s`,
-                lastWriteTime: `${((stats.lastWriteTime ?? 0) / 1000).toFixed(2)}s`,
-                totalBlocks: stats.totalBlocks,
-            },
-            `progress: ${stats.cursor.number} / ${headNumber} (${finalizedNumber ?? 0}) — ${percentStr}, ETA: ${etaStr}`,
-        )
-
-        // Update window markers
-        stats.lastLogTimeMs = now
-        stats.lastLogTotalBlocks = stats.totalBlocks ?? 0
-    }
-
-    let stats:
-        | {
-              cursor: TCursor
-              head: TCursor | undefined
-              finalizedHead: TCursor | undefined
-              lastBlockTime: number | undefined
-              avgReadTime: number | undefined
-              lastReadTime: number | undefined
-              avgWriteTime: number | undefined
-              lastWriteTime: number | undefined
-              startNumber: number | undefined
-              startTimeMs: number | undefined
-              targetNumber: number | undefined
-              lastLogTimeMs: number | undefined
-              lastLogTotalBlocks: number | undefined
-              totalBlocks: number | undefined
-              lastBatchSize: number | undefined
-              avgBatchSize: number | undefined
-              avgBlocksPerSec: number | undefined
-          }
-        | undefined = undefined
-
-    return createTracker<TCursor, TValue, TQuery>({
-        beforeRead: (cursor) => {
-            if (!stats && cursor) {
-                logger.info(`continue from ${cursor.number}`)
-                stats = {
-                    cursor,
-                    head: undefined,
-                    finalizedHead: undefined,
-                    lastBlockTime: undefined,
-                    avgReadTime: undefined,
-                    avgWriteTime: undefined,
-                    lastReadTime: undefined,
-                    lastWriteTime: undefined,
-                    startNumber: cursor.number,
-                    startTimeMs: Date.now(),
-                    targetNumber: undefined,
-                    lastLogTimeMs: Date.now(),
-                    lastLogTotalBlocks: 0,
-                    totalBlocks: 0,
-                    lastBatchSize: undefined,
-                    avgBatchSize: undefined,
-                    avgBlocksPerSec: undefined,
-                }
-                setInterval(emitLog, logIntervalMs)
-            }
-            readTimer.start()
-        },
-        afterRead: () => {
-            if (!stats) return
-
-            const elapsed = readTimer.stop()
-
-            stats.avgReadTime = stats.avgReadTime == null ? elapsed : (stats.avgReadTime + elapsed) / 2
-            stats.lastReadTime = elapsed
-        },
-        beforeWrite: () => {
-            writeTimer.start()
-        },
-        afterWrite: (message) => {
-            if (!stats) return
-
-            const elapsed = writeTimer.stop()
-            stats.avgWriteTime = stats.avgWriteTime == null ? elapsed : (stats.avgWriteTime + elapsed) / 2
-            stats.lastWriteTime = elapsed
-            stats.lastBlockTime = message.data[message.data.length - 1].value.header.timestamp * 1000
-            stats.head = message.head
-            stats.finalizedHead = message.finalizedHead
-            stats.cursor = message.cursor
-            if (stats.targetNumber == null) {
-                stats.targetNumber = message.finalizedHead?.number ?? message.head.number
-            }
-
-            const batchSize = message.data.length
-            stats.totalBlocks = (stats.totalBlocks ?? 0) + batchSize
-            stats.lastBatchSize = batchSize
-            stats.avgBatchSize = stats.avgBatchSize == null ? batchSize : (stats.avgBatchSize + batchSize) / 2
-
-            const cycleMs = (stats.lastReadTime ?? 0) + (stats.lastWriteTime ?? 0)
-            const instBlocksPerSec = cycleMs > 0 ? (batchSize * 1000) / cycleMs : 0
-            stats.avgBlocksPerSec =
-                stats.avgBlocksPerSec == null ? instBlocksPerSec : (stats.avgBlocksPerSec + instBlocksPerSec) / 2
-        },
-    })
 }
 
 function createTimer() {

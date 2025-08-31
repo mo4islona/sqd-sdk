@@ -1,10 +1,10 @@
 import {
-    createSource,
+    type DataWriteContext,
+    type DataTargetFactoryOptions,
+    type DataDuplex,
     createTarget,
     DataSource,
-    type DataTargetFactoryOptions,
-    type DataWriteContext,
-    type DataDuplex,
+    createSource,
 } from '../core'
 
 export type DataTransform<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery> = (

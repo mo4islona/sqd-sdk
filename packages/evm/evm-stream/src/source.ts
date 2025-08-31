@@ -13,7 +13,9 @@ export interface EvmPortalDataReaderOptions<F extends FieldSelection> {
     range?: Range
 }
 
-export function evmPortalDataSource<F extends FieldSelection>(options: EvmPortalDataReaderOptions<F>) {
+export type EvmData<F extends FieldSelection> = Block<F>[]
+
+export function createEvmPortalSource<F extends FieldSelection>(options: EvmPortalDataReaderOptions<F>) {
     let baseQuery = mergeRangeRequests(options.query ?? [], mergeDataRequests)
     if (options.range) {
         baseQuery = applyRangeBound(baseQuery, options.range)
@@ -22,7 +24,7 @@ export function evmPortalDataSource<F extends FieldSelection>(options: EvmPortal
     const createBlockStream = async function* (
         cursor?: BlockRef,
         query?: EvmDataRequestRange[],
-    ): AsyncIterableIterator<DataMessage<BlockRef, Block<F>>> {
+    ): AsyncIterableIterator<DataMessage<BlockRef, EvmData<F>>> {
         const mergedQuery = query ? mergeRangeRequests([...baseQuery, ...query], mergeDataRequests) : baseQuery
         const requestsBounded = cursor ? applyRangeBound(mergedQuery, {from: cursor.number + 1}) : mergedQuery
 
@@ -32,7 +34,7 @@ export function evmPortalDataSource<F extends FieldSelection>(options: EvmPortal
             const portalSource = portalDataSource({
                 portal: options.portal,
                 query: {
-                    type: 'evm' as const,
+                    type: 'evm',
                     fromBlock: request.range.from,
                     toBlock: request.range.to,
                     fields,
@@ -40,31 +42,7 @@ export function evmPortalDataSource<F extends FieldSelection>(options: EvmPortal
                 },
             })
 
-            for await (const message of portalSource.read({cursor})) {
-                switch (message.type) {
-                    case 'batch': {
-                        yield {
-                            type: 'batch',
-                            data: message.data.map((i) => {
-                                const value = createBlock<F>(i.value)
-
-                                return {
-                                    cursor: i.cursor,
-                                    value,
-                                }
-                            }),
-                            finalizedHead: message.finalizedHead,
-                            head: message.head,
-                            cursor: message.cursor,
-                        }
-                        break
-                    }
-                    case 'fork': {
-                        yield message
-                        break
-                    }
-                }
-            }
+            yield* portalSource.map((i) => i.map((i) => createBlock<F>(i))).read({cursor})
         }
     }
 

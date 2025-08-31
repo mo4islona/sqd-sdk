@@ -9,7 +9,7 @@
 //     type DataReadRequest,
 //     type Stream,
 // } from './core'
-import {DataCursor, type DataCursorUtils} from './cursor'
+import {DataCursor} from './cursor'
 
 export interface BlockRef {
     number: number
