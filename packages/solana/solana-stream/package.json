@@ -1,6 +1,6 @@
 {
     "name": "@belopash/solana-stream",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "description": "SVM block data streamer",
     "license": "GPL-3.0-or-later",
     "repository": "git@github.com:subsquid/squid.git",
