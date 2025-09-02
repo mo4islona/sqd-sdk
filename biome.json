@@ -5,8 +5,7 @@
         "formatWithErrors": false,
         "indentStyle": "space",
         "indentWidth": 4,
-        "lineWidth": 120,
-        "bracketSpacing": false
+        "lineWidth": 120
     },
     "linter": {
         "enabled": true,

@@ -1,15 +1,15 @@
-import {applyRangeBound, mergeRangeRequests, type Range} from '@belopash/core/internal/range'
+import {type Range, applyRangeBound, mergeRangeRequests} from '@belopash/core/internal/range'
 import {
-    BlockRefUtils,
-    createSource,
-    type DataReadRequest,
     type BlockRef,
+    BlockRefUtils,
     type DataMessage,
+    type DataReadRequest,
+    createSource,
 } from '@belopash/core/pipeline'
-import {createBlock, type Block, type FieldSelection, type RequiredFieldSelection} from './objects'
-import {mergeDataRequests, type SolanaDataRequestRange} from './query'
 import {type PortalClient, type PortalClientOptions, portalDataSource} from '@belopash/core/portal'
 import type * as solana from '@belopash/core/portal/solana/query'
+import {type Block, type FieldSelection, type RequiredFieldSelection, createBlock} from './objects'
+import {type SolanaDataRequestRange, mergeDataRequests} from './query'
 
 export interface SolanaPortalDataReaderOptions<F extends FieldSelection> {
     portal: PortalClientOptions | PortalClient

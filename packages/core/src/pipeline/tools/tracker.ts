@@ -8,6 +8,7 @@ export interface DataTrackerConfig<TCursor, TValue> {
     afterWrite?: (message: DataDataMessage<TCursor, TValue>) => void | Promise<void>
     beforeFork?: (message: DataForkMessage<TCursor>) => void | Promise<void>
     afterFork?: (message: DataForkMessage<TCursor>) => void | Promise<void>
+    afterEnd?: () => void | Promise<void>
 }
 
 export function createTracker<TCursor, TValue, TQuery>(
@@ -35,6 +36,8 @@ export function createTracker<TCursor, TValue, TQuery>(
                         break
                 }
             }
+
+            await config.afterEnd?.()
         },
     }))
 }
