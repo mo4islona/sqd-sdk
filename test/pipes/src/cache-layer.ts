@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { promisify } from 'node:util'
 import { gunzip, gzip } from 'node:zlib'
 import type { DataDataMessage } from '@belopash/core'
@@ -14,13 +15,30 @@ const gzipAsync = promisify(gzip)
 
 type Data = PortalData<evm.Query>
 
+function md5Hash(value: unknown) {
+    return createHash('md5').update(JSONStringify(value)).digest('hex')
+}
+
 export function createCacheLayer({ path, compress = false }: { path: string; compress?: boolean }) {
     const db = new Database(path)
 
-    db.exec('CREATE TABLE IF NOT EXISTS data(number INTEGER PRIMARY KEY, value BLOB)')
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS metadata(
+          query_hash TEXT PRIMARY KEY,
+          version  TEXT
+        )
+    `)
+    db.exec(`CREATE TABLE IF NOT EXISTS data(
+        query_hash  TEXT, 
+        number      INTEGER, 
+        value       BLOB,
+        PRIMARY KEY (number, query_hash)
+    )`)
 
-    const insert = db.prepare('INSERT INTO data (number, value) VALUES (?, ?);')
-    const select = db.prepare<[number], { value: string }>(`SELECT * FROM data WHERE number > ? ORDER BY number ASC;`)
+    const insert = db.prepare('INSERT INTO data (number, query_hash, value) VALUES (?, ?, ?);')
+    const select = db.prepare<[number, string], { value: string }>(
+        `SELECT * FROM data WHERE number > ? and query_hash = ? ORDER BY number ASC;`,
+    )
 
     const decompressValue = async (value: string): Promise<string> => {
         if (!compress) return value
@@ -41,8 +59,9 @@ export function createCacheLayer({ path, compress = false }: { path: string; com
                 cursorUtils: writer.cursorUtils,
                 read: async function* ({ cursor, query }) {
                     let lastCursor = cursor
+                    const queryHash = md5Hash(query)
 
-                    for (const message of select.iterate(cursor ? cursor.number : 0)) {
+                    for (const message of select.iterate(cursor ? cursor.number : 0, queryHash)) {
                         const decoded: DataDataMessage<BlockRef, Data> = JSONParse(await decompressValue(message.value))
 
                         yield decoded
@@ -55,7 +74,11 @@ export function createCacheLayer({ path, compress = false }: { path: string; com
                             case 'data': {
                                 const lastItem = last(message.data)
 
-                                insert.run(lastItem.cursor.number, await compressValue(JSONStringify(message)))
+                                insert.run(
+                                    lastItem.cursor.number,
+                                    queryHash,
+                                    await compressValue(JSONStringify(message)),
+                                )
 
                                 yield message
                                 break

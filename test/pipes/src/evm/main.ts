@@ -1,4 +1,4 @@
-import { createEvmPortalSource } from '@belopash/evm-stream'
+import { EvmQueryBuilder, createEvmPortalSource } from '@belopash/evm-stream'
 import { createCacheLayer } from '../cache-layer'
 import { createProgressTracker } from '../progress-tracker'
 import { swapPriceExtension } from './swap-price-extension'
@@ -8,6 +8,14 @@ import { uniswapV3Swaps } from './uniswap-v3-swaps'
 async function main() {
     const stream = createEvmPortalSource({
         portal: 'https://portal.sqd.dev/datasets/ethereum-mainnet',
+        query: new EvmQueryBuilder().addFields({
+            log: {
+                transactionIndex: true,
+            },
+            transaction: {
+                sighash: true,
+            },
+        }),
         middleware: createCacheLayer({
             path: './cache.sqlite',
             compress: true,
@@ -23,7 +31,9 @@ async function main() {
         const poolsCount = blocks.reduce((acc, { pools }) => acc + pools.length, 0)
 
         const swaps = blocks.flatMap((b) => b.swaps)
-        console.log('SWAP EXAMPLE', swaps[0])
+        if (swaps[0]) {
+            console.log('SWAP EXAMPLE', swaps[0])
+        }
         console.log(`${swapsCount} swaps and ${poolsCount} pools for ${blocks.length} blocks`)
     }
 }

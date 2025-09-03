@@ -1,30 +1,4 @@
-import {
-    QTY,
-    BYTES,
-    constant,
-    NAT,
-    nullable,
-    object,
-    option,
-    STRING,
-    taggedUnion,
-    type Validator,
-    withDefault,
-    oneOf,
-    array,
-} from '../../validation'
-import {
-    type Select,
-    type Selector,
-    type Trues,
-    type Hex,
-    type ConditionalOmit,
-    type Simplify,
-    type PortalQuery,
-    project,
-    type Selected,
-    type ObjectValidatorShape,
-} from '../common'
+import type { ConditionalOmit, Hex, PortalQuery, Select, Selected, Selector, Simplify, Trues } from '../common'
 
 type AddPrefix<Prefix extends string, S> = S extends string ? `${Prefix}${Capitalize<S>}` : never
 
@@ -201,7 +175,7 @@ export type StateDiffDeleteFields = StateDiffBaseFields & {
     next?: undefined
 }
 
-export type BlockHeaderFieldSelection = Selector<keyof BlockHeaderFields, 'number' | 'hash'>
+export type BlockHeaderFieldSelection = Selector<keyof BlockHeaderFields>
 export type BlockHeader<T extends BlockHeaderFieldSelection = Trues<BlockHeaderFieldSelection>> = Select<
     BlockHeaderFields,
     T
@@ -272,20 +246,24 @@ export type TraceRewardAction<F extends TraceRewardFieldSelection = Trues<TraceR
 
 export type TraceCreate<F extends TraceCreateFieldSelection = Trues<TraceCreateFieldSelection>> = Simplify<
     Select<TraceCreateFields, F> &
-        ConditionalOmit<{action: TraceCreateAction<F>; result?: TraceCreateResult<F>}, {[k: string]: never} | undefined>
+        ConditionalOmit<
+            { action: TraceCreateAction<F>; result?: TraceCreateResult<F> },
+            { [k: string]: never } | undefined
+        >
 >
 
 export type TraceCall<F extends TraceCallFieldSelection = Trues<TraceCallFieldSelection>> = Simplify<
     Select<TraceCallFields, F> &
-        ConditionalOmit<{action: TraceCallAction<F>; result?: TraceCallResult<F>}, {[k: string]: never} | undefined>
+        ConditionalOmit<{ action: TraceCallAction<F>; result?: TraceCallResult<F> }, { [k: string]: never } | undefined>
 >
 
 export type TraceSuicide<F extends TraceSuicideFieldSelection = Trues<TraceSuicideFieldSelection>> = Simplify<
-    Select<TraceSuicideFields, F> & ConditionalOmit<{action: TraceSuicideAction<F>}, {[k: string]: never} | undefined>
+    Select<TraceSuicideFields, F> &
+        ConditionalOmit<{ action: TraceSuicideAction<F> }, { [k: string]: never } | undefined>
 >
 
 export type TraceReward<F extends TraceRewardFieldSelection = Trues<TraceRewardFieldSelection>> = Simplify<
-    Select<TraceRewardFields, F> & ConditionalOmit<{action: TraceRewardAction<F>}, {[k: string]: never} | undefined>
+    Select<TraceRewardFields, F> & ConditionalOmit<{ action: TraceRewardAction<F> }, { [k: string]: never } | undefined>
 >
 
 export type Trace<F extends TraceFieldSelection = Trues<TraceFieldSelection>> = F extends any
