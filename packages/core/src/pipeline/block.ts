@@ -9,7 +9,7 @@
 //     type DataReadRequest,
 //     type Stream,
 // } from './core'
-import {DataCursor} from './cursor'
+import { DataCursor } from './cursor'
 
 export interface BlockRef {
     number: number
@@ -24,8 +24,8 @@ export const BlockRefUtils = {
 
         return DataCursor.Equal
     },
-    serialize: (ref: BlockRef) => ref,
-    deserialize: (ref: BlockRef) => ref,
+    serialize: (ref: BlockRef) => JSON.stringify(ref),
+    deserialize: (ref: string) => JSON.parse(ref),
 }
 
 // export type BlockSource<TValue, TQuery> = DataSource<BlockRef, TValue, TQuery>

@@ -1,13 +1,14 @@
 import type { BlockRef } from '@belopash/core'
 import { createTransformer } from '@belopash/core'
 import { type Block, EvmQueryBuilder } from '@belopash/evm-stream'
+import { type BlockRange, parseRange } from '../block-range'
 import * as factoryAbi from './abi/factory'
 
 type PoolCreated = ReturnType<typeof factoryAbi.events.PoolCreated.decode>
 
-type BlockRequest = number
+export function uniswapV3Pools<Pipe>({ range }: { range?: BlockRange }) {
+    const { from, to } = parseRange({ range, defaultFrom: 12369621 })
 
-export function uniswapV3Pools<Pipe>({ from = 12369621, to }: { from?: BlockRequest; to?: BlockRequest }) {
     const fields = {
         log: {
             address: true,
@@ -23,7 +24,7 @@ export function uniswapV3Pools<Pipe>({ from = 12369621, to }: { from?: BlockRequ
         },
     } as const
 
-    const uniswapQuery = new EvmQueryBuilder().addFields(fields).addLog({
+    const poolQuery = new EvmQueryBuilder().addFields(fields).addLog({
         range: { from, to },
         request: {
             topic0: [factoryAbi.events.PoolCreated.topic],
@@ -41,14 +42,14 @@ export function uniswapV3Pools<Pipe>({ from = 12369621, to }: { from?: BlockRequ
             read: async function* (reader) {
                 for await (const message of stream.read({
                     cursor: reader.cursor,
-                    query: uniswapQuery.merge(reader.query),
+                    query: poolQuery.merge(reader.query),
                 })) {
                     if (message.type !== 'data') {
                         yield message
                         continue
                     }
 
-                    yield <any>{
+                    yield {
                         ...message,
                         data: message.data.map((m) => {
                             return {

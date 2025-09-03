@@ -171,7 +171,7 @@ export const REQUIRED_FIELDS = {
     block: {
         number: true,
         hash: true,
-        // parentHash: true,
+        parentHash: true,
         timestamp: true,
     },
     transaction: {

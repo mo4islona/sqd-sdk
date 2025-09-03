@@ -1,13 +1,13 @@
+import { promisify } from 'node:util'
 import { gunzip, gzip } from 'node:zlib'
 import type { DataDataMessage } from '@belopash/core'
 import { type DataSource, createSource, createTarget } from '@belopash/core'
 import { last } from '@belopash/core/internal'
 import type { BlockRef, PortalData } from '@belopash/core/portal'
+import type { evm } from '@belopash/core/portal/query'
+import type { EvmQueryBuilder } from '@belopash/evm-stream'
 import Database from 'better-sqlite3'
 import { JSONParse, JSONStringify } from 'json-with-bigint'
-
-import { promisify } from 'node:util'
-import type { evm } from '@belopash/core/portal/query'
 
 const gunzipAsync = promisify(gunzip)
 const gzipAsync = promisify(gzip)
@@ -35,12 +35,13 @@ export function createCacheLayer({ path, compress = false }: { path: string; com
         return await gzipAsync(value)
     }
 
-    return createTarget<BlockRef, Data, evm.Query, DataSource<BlockRef, Data, evm.Query>>({
+    return createTarget<BlockRef, Data, EvmQueryBuilder, DataSource<BlockRef, Data, EvmQueryBuilder>>({
         write: (writer) => {
             return createSource({
                 cursorUtils: writer.cursorUtils,
                 read: async function* ({ cursor, query }) {
                     let lastCursor = cursor
+
                     for (const message of select.iterate(cursor ? cursor.number : 0)) {
                         const decoded: DataDataMessage<BlockRef, Data> = JSONParse(await decompressValue(message.value))
 

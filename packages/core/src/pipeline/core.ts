@@ -664,7 +664,9 @@ function validateMessage<TCursor, TValue>(
         let prevCursor = lastCursor
         for (const item of message.data) {
             if (prevCursor && !cursorUtils.compare(item.cursor, prevCursor).isGreater) {
-                throw new RangeError('Item is below or equal to the previous item')
+                throw new RangeError(
+                    `Item is below or equal to the previous item, previous ${cursorUtils.serialize(prevCursor)}, current: ${cursorUtils.serialize(item.cursor)}`,
+                )
             }
             prevCursor = item.cursor
         }
