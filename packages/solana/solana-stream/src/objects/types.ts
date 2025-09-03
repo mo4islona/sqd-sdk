@@ -1,9 +1,9 @@
+import type { Select, Selector, Trues } from '@belopash/core/internal/selection'
+import type { Simplify } from '@belopash/core/internal/types/misc'
+import type { Base58, Hex } from '@belopash/core/internal/types/primitive'
 import type * as Solana from '@belopash/core/portal/solana'
-import type {Trues, Select, Selector} from '@belopash/core/internal/selection'
-import type {Hex, Base58} from '@belopash/core/internal/types/primitive'
-import type {Simplify} from '@belopash/core/internal/types/misc'
 
-type Id = {id: string}
+type Id = { id: string }
 
 export type BlockHeaderFields = {
     hash: Base58
@@ -204,7 +204,7 @@ export type Instruction<F extends FieldSelection = Trues<FieldSelection>> = Simp
     Id &
         Select<InstructionFields, NonNullable<F['instruction']> & RequiredFieldSelection['instruction']> &
         (NonNullable<F['instruction']>['data'] extends true
-            ? {d1: Hex; d2: Hex; d4: Hex; d8: Hex}
+            ? { d1: Hex; d2: Hex; d4: Hex; d8: Hex }
             : Record<never, never>) & {
             readonly block: Block<F>
             readonly transaction?: Transaction<F>

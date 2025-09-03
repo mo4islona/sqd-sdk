@@ -1,4 +1,4 @@
-import type {Hex} from '@belopash/core/internal/types/primitive'
+import type { Hex } from '@belopash/core/internal/types/primitive'
 import type * as EVM from '@belopash/core/portal/evm'
 import type * as base from './types'
 
@@ -42,7 +42,7 @@ export class BlockHeader<F extends base.FieldSelection> {
 
     #block!: base.Block<F>
 
-    constructor(raw: EVM.BlockHeader<{number: true; hash: true}>, block: base.Block<F>) {
+    constructor(raw: EVM.BlockHeader<{ number: true; hash: true }>, block: base.Block<F>) {
         Object.assign(this, raw)
         this.id = formatId(raw)
         this.#block = block
@@ -88,7 +88,7 @@ export class Transaction<F extends base.FieldSelection> {
     l1BlobBaseFeeScalar?: number
     l1BaseFeeScalar?: number
 
-    constructor(raw: EVM.Transaction<{transactionIndex: true}>, block: base.Block<F>) {
+    constructor(raw: EVM.Transaction<{ transactionIndex: true }>, block: base.Block<F>) {
         Object.assign(this, raw)
         this.id = formatId(block.header, raw.transactionIndex)
         this.#block = block
@@ -139,7 +139,7 @@ export class Log<F extends base.FieldSelection> {
     topics!: Hex[]
 
     constructor(
-        raw: EVM.Log<{transactionIndex: true; logIndex: true}>,
+        raw: EVM.Log<{ transactionIndex: true; logIndex: true }>,
         block: base.Block<F>,
         transaction?: base.Transaction<F>,
     ) {
@@ -179,7 +179,7 @@ class TraceBase<F extends base.FieldSelection> {
     revertReason?: string
 
     constructor(
-        raw: EVM.Trace<{type: true; transactionIndex: true; traceAddress: true}>,
+        raw: EVM.Trace<{ type: true; transactionIndex: true; traceAddress: true }>,
         block: base.Block<F>,
         transaction?: base.Transaction<F>,
         parent?: base.Trace<F>,
@@ -269,7 +269,7 @@ export class StateDiff<F extends base.FieldSelection> {
     next?: Hex | null
 
     constructor(
-        raw: EVM.StateDiff<{transactionIndex: true; address: true; key: true}>,
+        raw: EVM.StateDiff<{ transactionIndex: true; address: true; key: true }>,
         block: base.Block<F>,
         transaction?: base.Transaction<F>,
     ) {
@@ -298,7 +298,7 @@ export class StateDiff<F extends base.FieldSelection> {
     }
 }
 
-function formatId(block: {number: number; hash: string}, ...address: number[]): string {
+function formatId(block: { number: number; hash: string }, ...address: number[]): string {
     let no = block.number.toString().padStart(12, '0')
     let hash = block.hash.slice(0, 5)
     let id = `${no}-${hash}`

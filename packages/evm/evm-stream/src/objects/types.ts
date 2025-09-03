@@ -1,9 +1,9 @@
-import type {Simplify} from '@belopash/core/internal/types/misc'
-import type {Trues, Select, Selector} from '@belopash/core/internal/selection'
-import type {Hex} from '@belopash/core/internal/types/primitive'
+import type { Select, Selector, Trues } from '@belopash/core/internal/selection'
+import type { Simplify } from '@belopash/core/internal/types/misc'
+import type { Hex } from '@belopash/core/internal/types/primitive'
 import type * as EVM from '@belopash/core/portal/evm'
 
-type Id = {id: string}
+type Id = { id: string }
 
 type AddPrefix<Prefix extends string, S> = S extends string ? `${Prefix}${Capitalize<S>}` : never
 
@@ -167,35 +167,38 @@ export type StateDiffFields = {
     next?: Hex
 }
 
-export type RequiredFieldSelection = {
+export const REQUIRED_FIELDS = {
     block: {
-        number: true
-        hash: true
-        parentHash: true
-    }
+        number: true,
+        hash: true,
+        // parentHash: true,
+        timestamp: true,
+    },
     transaction: {
-        transactionIndex: true
-    }
+        transactionIndex: true,
+    },
     log: {
-        transactionIndex: true
-        logIndex: true
-    }
+        transactionIndex: true,
+        logIndex: true,
+    },
     trace: {
-        type: true
-        traceAddress: true
-        transactionIndex: true
-    }
+        type: true,
+        traceAddress: true,
+        transactionIndex: true,
+    },
     stateDiff: {
-        transactionIndex: true
-    }
-}
+        transactionIndex: true,
+    },
+} as const
+
+export type RequiredFieldSelection = typeof REQUIRED_FIELDS
 
 export type FieldSelection = {
-    block?: Selector<Exclude<keyof BlockHeaderFields, keyof RequiredFieldSelection['block']>>
-    transaction?: Selector<Exclude<keyof TransactionFields, keyof RequiredFieldSelection['transaction']>>
-    log?: Selector<Exclude<keyof LogFields, keyof RequiredFieldSelection['log']>>
+    block?: Selector<keyof BlockHeaderFields>
+    transaction?: Selector<keyof TransactionFields>
+    log?: Selector<keyof LogFields>
     trace?: Selector<
-        | Exclude<keyof TraceBaseFields, keyof RequiredFieldSelection['trace']>
+        | keyof TraceBaseFields
         | AddPrefix<'create', keyof TraceCreateActionFields>
         | AddPrefix<'createResult', keyof TraceCreateResultFields>
         | AddPrefix<'call', keyof TraceCallActionFields>
@@ -203,7 +206,7 @@ export type FieldSelection = {
         | AddPrefix<'suicide', keyof TraceSuicideActionFields>
         | AddPrefix<'reward', keyof TraceRewardActionFields>
     >
-    stateDiff?: Selector<Exclude<keyof StateDiffFields, keyof RequiredFieldSelection['stateDiff']>>
+    stateDiff?: Selector<keyof StateDiffFields>
 }
 
 export type Block<F extends FieldSelection = Trues<FieldSelection>> = {
@@ -245,7 +248,7 @@ type RemoveKeysPrefix<Prefix extends string, T> = {
 
 export type TraceCreate<F extends FieldSelection = Trues<FieldSelection>> = Simplify<
     Id &
-        Select<TraceBaseFields & {type: 'create'}, NonNullable<F['trace']> & RequiredFieldSelection['trace']> & {
+        Select<TraceBaseFields & { type: 'create' }, NonNullable<F['trace']> & RequiredFieldSelection['trace']> & {
             action: Select<TraceCreateActionFields, RemoveKeysPrefix<'create', NonNullable<F['trace']>>>
             result?: Select<TraceCreateResultFields, RemoveKeysPrefix<'createResult', NonNullable<F['trace']>>>
             readonly block: Block<F>
@@ -257,7 +260,7 @@ export type TraceCreate<F extends FieldSelection = Trues<FieldSelection>> = Simp
 
 export type TraceCall<F extends FieldSelection = Trues<FieldSelection>> = Simplify<
     Id &
-        Select<TraceBaseFields & {type: 'call'}, NonNullable<F['trace']> & RequiredFieldSelection['trace']> & {
+        Select<TraceBaseFields & { type: 'call' }, NonNullable<F['trace']> & RequiredFieldSelection['trace']> & {
             action: Select<TraceCallActionFields, RemoveKeysPrefix<'call', NonNullable<F['trace']>>>
             result?: Select<TraceCallResultFields, RemoveKeysPrefix<'callResult', NonNullable<F['trace']>>>
             readonly block: Block<F>
@@ -269,7 +272,7 @@ export type TraceCall<F extends FieldSelection = Trues<FieldSelection>> = Simpli
 
 export type TraceSuicide<F extends FieldSelection = Trues<FieldSelection>> = Simplify<
     Id &
-        Select<TraceBaseFields & {type: 'suicide'}, NonNullable<F['trace']> & RequiredFieldSelection['trace']> & {
+        Select<TraceBaseFields & { type: 'suicide' }, NonNullable<F['trace']> & RequiredFieldSelection['trace']> & {
             action: Select<TraceSuicideActionFields, RemoveKeysPrefix<'suicide', NonNullable<F['trace']>>>
             readonly block: Block<F>
             readonly transaction?: Transaction<F>
@@ -280,7 +283,7 @@ export type TraceSuicide<F extends FieldSelection = Trues<FieldSelection>> = Sim
 
 export type TraceReward<F extends FieldSelection = Trues<FieldSelection>> = Simplify<
     Id &
-        Select<TraceBaseFields & {type: 'reward'}, NonNullable<F['trace']> & RequiredFieldSelection['trace']> & {
+        Select<TraceBaseFields & { type: 'reward' }, NonNullable<F['trace']> & RequiredFieldSelection['trace']> & {
             action: Select<TraceRewardActionFields, RemoveKeysPrefix<'reward', NonNullable<F['trace']>>>
             readonly block: Block<F>
             readonly transaction?: Transaction<F>
@@ -300,29 +303,6 @@ export type StateDiff<F extends FieldSelection = Trues<FieldSelection>> = Simpli
             readonly transaction?: Transaction<F>
         }
 >
-
-export const REQUIRED_FIELDS = {
-    block: {
-        number: true,
-        hash: true,
-        parentHash: true,
-    },
-    transaction: {
-        transactionIndex: true,
-    },
-    log: {
-        transactionIndex: true,
-        logIndex: true,
-    },
-    trace: {
-        type: true,
-        traceAddress: true,
-        transactionIndex: true,
-    },
-    stateDiff: {
-        transactionIndex: true,
-    },
-} as const satisfies RequiredFieldSelection
 
 export type BlockPartial<F extends FieldSelection = Trues<FieldSelection>> = EVM.Block<any>
 

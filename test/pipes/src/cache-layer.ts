@@ -1,19 +1,20 @@
 import { gunzip, gzip } from 'node:zlib'
-import { type DataSource, createSource, createTarget } from '@belopash/core'
 import type { DataDataMessage } from '@belopash/core'
+import { type DataSource, createSource, createTarget } from '@belopash/core'
 import { last } from '@belopash/core/internal'
+import type { BlockRef, PortalData } from '@belopash/core/portal'
 import Database from 'better-sqlite3'
 import { JSONParse, JSONStringify } from 'json-with-bigint'
 
 import { promisify } from 'node:util'
+import type { evm } from '@belopash/core/portal/query'
 
 const gunzipAsync = promisify(gunzip)
 const gzipAsync = promisify(gzip)
 
-export function createCacheLayer<Cursor extends { number: number; hash: string }, Value, Query>({
-    path,
-    compress = false,
-}: { path: string; compress?: boolean }) {
+type Data = PortalData<evm.Query>
+
+export function createCacheLayer({ path, compress = false }: { path: string; compress?: boolean }) {
     const db = new Database(path)
 
     db.exec('CREATE TABLE IF NOT EXISTS data(number INTEGER PRIMARY KEY, value BLOB)')
@@ -34,14 +35,14 @@ export function createCacheLayer<Cursor extends { number: number; hash: string }
         return await gzipAsync(value)
     }
 
-    return createTarget<Cursor, Value, Query, DataSource<Cursor, Value, Query>>({
+    return createTarget<BlockRef, Data, evm.Query, DataSource<BlockRef, Data, evm.Query>>({
         write: (writer) => {
             return createSource({
                 cursorUtils: writer.cursorUtils,
                 read: async function* ({ cursor, query }) {
                     let lastCursor = cursor
                     for (const message of select.iterate(cursor ? cursor.number : 0)) {
-                        const decoded: DataDataMessage<Cursor, Value> = JSONParse(await decompressValue(message.value))
+                        const decoded: DataDataMessage<BlockRef, Data> = JSONParse(await decompressValue(message.value))
 
                         yield decoded
 

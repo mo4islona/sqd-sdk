@@ -1,5 +1,5 @@
-import type {DataDataMessage, DataForkMessage, DataPassThrough, DataTargetFactoryOptions} from '../core'
-import {createTransformer} from './transformer'
+import type { DataDataMessage, DataForkMessage, DataPassThrough, DataTargetFactoryOptions } from '../core'
+import { createTransformer } from './transformer'
 
 export interface DataTrackerConfig<TCursor, TValue> {
     beforeRead?: () => void | Promise<void>
@@ -14,7 +14,7 @@ export interface DataTrackerConfig<TCursor, TValue> {
 export function createTracker<TCursor, TValue, TQuery>(
     config: DataTrackerConfig<TCursor, TValue>,
 ): (opts: DataTargetFactoryOptions) => DataPassThrough<TCursor, TValue, TQuery> {
-    return createTransformer<TCursor, TCursor, TValue, TValue, TQuery, TQuery>((opts) => ({
+    return createTransformer<TValue, TValue, TQuery, TCursor>((opts) => ({
         cursorUtils: opts.cursorUtils,
         read: async function* (readOpts) {
             await config.beforeRead?.()

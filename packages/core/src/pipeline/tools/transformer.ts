@@ -1,55 +1,40 @@
 import {
-    type DataWriteContext,
-    type DataTargetFactoryOptions,
     type DataDuplex,
-    createTarget,
     DataSource,
+    type DataTargetFactoryOptions,
+    type DataWriteContext,
     createSource,
+    createTarget,
 } from '../core'
 
-export type DataTransform<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery> = (
-    opts: DataWriteContext<TInputCursor, TInputValue, TInpuTQuery> & {unfinalized: boolean},
-) => DataWriteContext<TOutputCursor, TOutputValue, TOutpuTQuery> & {unfinalized?: boolean}
+export type DataTransform<In, Out, Query, Cursor> = (
+    opts: DataWriteContext<Cursor, In, Query>,
+) => DataWriteContext<Cursor, Out, Query>
 
-export interface DataTransformerConfig<
-    TInputCursor,
-    TOutputCursor,
-    TInputValue,
-    TOutputValue,
-    TInpuTQuery,
-    TOutpuTQuery,
-> {
-    unfinalized?: boolean
-    transform: DataTransform<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>
+export interface DataTransformerConfig<In, Out, Query, Cursor> {
+    transform: DataTransform<In, Out, Query, Cursor>
 }
 
-export function createTransformer<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>(
-    transform: DataTransform<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>,
-): (
-    opts: DataTargetFactoryOptions,
-) => DataDuplex<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>
-export function createTransformer<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>(
-    config: DataTransformerConfig<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>,
-): DataDuplex<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>
-export function createTransformer<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>(
-    transformOrConfig:
-        | DataTransform<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>
-        | DataTransformerConfig<TInputCursor, TOutputCursor, TInputValue, TOutputValue, TInpuTQuery, TOutpuTQuery>,
+export function createTransformer<In, Out, Query, Cursor>(
+    transform: DataTransform<In, Out, Query, Cursor>,
+): (opts: DataTargetFactoryOptions) => DataDuplex<In, Out, Query, Cursor>
+export function createTransformer<In, Out, Query, Cursor>(
+    config: DataTransformerConfig<In, Out, Query, Cursor>,
+): DataDuplex<In, Out, Query, Cursor>
+export function createTransformer<In, Out, Query, Cursor>(
+    transformOrConfig: DataTransform<In, Out, Query, Cursor> | DataTransformerConfig<In, Out, Query, Cursor>,
 ) {
     if (typeof transformOrConfig === 'function') {
         return (opts: DataTargetFactoryOptions) =>
             createTransformer({
-                unfinalized: opts.unfinalized,
                 transform: transformOrConfig,
             })
     }
 
-    return createTarget<TInputCursor, TInputValue, TInpuTQuery, DataSource<TOutputCursor, TOutputValue, TOutpuTQuery>>({
-        unfinalized: transformOrConfig.unfinalized ?? true,
+    return createTarget<Cursor, In, Query, DataSource<Cursor, Out, Query>>({
         write: (writeOpts) => {
             const transformed = transformOrConfig.transform({
                 ...writeOpts,
-                unfinalized: transformOrConfig.unfinalized ?? true,
             })
 
             if (transformed instanceof DataSource) {
@@ -57,7 +42,6 @@ export function createTransformer<TInputCursor, TOutputCursor, TInputValue, TOut
             }
 
             return createSource({
-                unfinalized: transformed.unfinalized ?? transformOrConfig.unfinalized ?? true,
                 cursorUtils: transformed.cursorUtils,
                 read: transformed.read,
             })

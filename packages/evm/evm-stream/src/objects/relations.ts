@@ -1,15 +1,15 @@
-import {maybeLast} from '@belopash/core/internal/misc'
-import type * as base from './types'
+import { maybeLast } from '@belopash/core/internal/misc'
 import type * as EVM from '@belopash/core/portal/evm'
-import {BlockHeader, Transaction, Log, TraceCreate, TraceCall, TraceSuicide, TraceReward, StateDiff} from './entities'
+import { BlockHeader, Log, StateDiff, TraceCall, TraceCreate, TraceReward, TraceSuicide, Transaction } from './entities'
+import type * as base from './types'
 
 export function createBlock<F extends base.FieldSelection>(
     raw: EVM.Block<{
-        block: {number: true; hash: true}
-        transaction: {transactionIndex: true}
-        log: {transactionIndex: true; logIndex: true}
-        trace: {transactionIndex: true; traceAddress: true; type: true}
-        stateDiff: {transactionIndex: true; address: true; key: true}
+        block: { number: true; hash: true }
+        transaction: { transactionIndex: true }
+        log: { transactionIndex: true; logIndex: true }
+        trace: { transactionIndex: true; traceAddress: true; type: true }
+        stateDiff: { transactionIndex: true; address: true; key: true }
     }>,
 ): base.Block<F> {
     const block = {} as base.Block<F>

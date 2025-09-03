@@ -1,5 +1,5 @@
+import { type Range, type RangeRequest, applyRangeBound, mergeRangeRequests } from '@belopash/core/internal/range'
 import type * as EVM from '@belopash/core/portal/evm'
-import {applyRangeBound, mergeRangeRequests, type Range, type RangeRequest} from '@belopash/core/internal/range'
 
 // TODO: is it needed?
 export type {
@@ -10,7 +10,7 @@ export type {
     LogRequest,
 } from '@belopash/core/portal/evm'
 
-export type RequestOptions<R> = {range?: Range; request: R}
+export type RequestOptions<R> = { range?: Range; request: R }
 export type LogRequestOptions = RequestOptions<EVM.LogRequest>
 export type TransactionRequestOptions = RequestOptions<EVM.TransactionRequest>
 export type TraceRequestOptions = RequestOptions<EVM.TraceRequest>
@@ -20,13 +20,52 @@ export type EvmDataRequest = EVM.DataRequest
 
 export type EvmDataRequestRange = RangeRequest<EvmDataRequest>
 
-export class EvmQueryBuilder<F extends EVM.FieldSelection = {block: {number: true; hash: true}}> {
-    private range: Range = {from: 0}
-    private requests: RangeRequest<EvmDataRequest>[] = []
+function mergeDeep<T extends object, U extends object>(obj1: T, obj2: U): T & U {
+    const result: any = { ...obj1 }
+    for (const key in obj2) {
+        if (
+            // biome-ignore lint/suspicious/noPrototypeBuiltins: <explanation>
+            obj2.hasOwnProperty(key) &&
+            typeof obj2[key] === 'object' &&
+            obj2[key] !== null &&
+            typeof result[key] === 'object' &&
+            result[key] !== null
+        ) {
+            result[key] = mergeDeep(result[key], obj2[key])
+        } else {
+            result[key] = obj2[key]
+        }
+    }
+    return result
+}
+
+export class EvmQueryBuilder {
+    protected range: Range = { from: 0 }
+    protected requests: RangeRequest<EvmDataRequest>[] = []
+    protected fields: EVM.FieldSelection = {}
+
+    merge(instance?: EvmQueryBuilder) {
+        if (!instance) return this
+
+        this.requests = [...instance.requests, ...this.requests]
+        this.addFields(instance.getFields())
+        this.setRange(instance.range)
+
+        return this
+    }
+
+    addFields(fields: EVM.FieldSelection): this {
+        this.fields = mergeDeep(this.fields, fields)
+        return this
+    }
+
+    getFields() {
+        return this.fields
+    }
 
     private addRequest(type: keyof EVM.DataRequest, options: RequestOptions<any>): this {
         this.requests.push({
-            range: options.range ?? {from: 0},
+            range: options.range ?? { from: 0 },
             request: {
                 [type]: [mapRequest(options)],
             },
@@ -35,7 +74,7 @@ export class EvmQueryBuilder<F extends EVM.FieldSelection = {block: {number: tru
     }
 
     includeAllBlocks(range?: Range): this {
-        this.requests.push({range: range ?? {from: 0}, request: {includeAllBlocks: true}})
+        this.requests.push({ range: range ?? { from: 0 }, request: { includeAllBlocks: true } })
         return this
     }
 
@@ -60,7 +99,7 @@ export class EvmQueryBuilder<F extends EVM.FieldSelection = {block: {number: tru
         return this
     }
 
-    build(): EvmDataRequestRange[] {
+    calculateRanges(): EvmDataRequestRange[] {
         return applyRangeBound(mergeRangeRequests(this.requests, mergeDataRequests), this.range)
     }
 }
@@ -89,5 +128,5 @@ function concaTQueryLists<T extends object>(a?: T[], b?: T[]): T[] | undefined {
 }
 
 function mapRequest<T>(options: RequestOptions<T>): T {
-    return {...options.request}
+    return { ...options.request }
 }

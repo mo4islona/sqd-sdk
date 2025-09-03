@@ -1,5 +1,5 @@
-import {assertNotNull, splitSlice} from '../misc'
 import {Heap} from '../heap'
+import {assertNotNull, splitSlice} from '../misc'
 import {assert} from '../misc'
 import type {FiniteRange, Range, RangeList, RangeRequest, RangeRequestList} from './interfaces'
 
