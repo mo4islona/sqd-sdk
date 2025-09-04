@@ -1,41 +1,67 @@
-import { EvmQueryBuilder, createEvmPortalSource } from '@belopash/evm-stream'
+import path from 'node:path'
+import { createEvmPortalSource } from '@belopash/evm-stream'
+import { createClient } from '@clickhouse/client'
 import { createCacheLayer } from '../cache-layer'
+import { createClickhouseTarget } from '../clickhouse/clickouse-target'
 import { createProgressTracker } from '../progress-tracker'
 import { swapPriceExtension } from './swap-price-extension'
-import { uniswapV3Pools } from './uniswap-v3-pools'
 import { uniswapV3Swaps } from './uniswap-v3-swaps'
 
 async function main() {
-    const stream = createEvmPortalSource({
+    const client = createClient({
+        password: process.env.CLIKCHOUSE_PASSWORD,
+        clickhouse_settings: {
+            date_time_input_format: 'best_effort', // support native date class
+        },
+    })
+
+    createEvmPortalSource({
         portal: 'https://portal.sqd.dev/datasets/ethereum-mainnet',
-        query: new EvmQueryBuilder().addFields({
-            log: {
-                transactionIndex: true,
-            },
-            transaction: {
-                sighash: true,
-            },
-        }),
         middleware: createCacheLayer({
             path: './cache.sqlite',
             compress: true,
         }),
     })
         .pipe(createProgressTracker())
-        .pipe(uniswapV3Swaps({ range: { from: '12,369,621', to: '+1_000' } }))
+        .pipe(uniswapV3Swaps({ range: { from: '12,369,621' } }))
         .pipe(swapPriceExtension())
-        .pipe(uniswapV3Pools({ range: { from: '12,369,621', to: '+2_000' } }))
+        .pipe(
+            createClickhouseTarget({
+                client,
+                onStart: async ({ store }) => {
+                    await store.executeFiles(path.join(__dirname, 'sql/00_create_tables.sql'))
+                },
+                onData: async ({ store, data }) => {
+                    await store.insert({
+                        table: 'swaps_raw',
+                        values: data
+                            .flatMap((d) => d.swaps)
+                            .map((s) => ({
+                                timestamp: s.timestamp,
+                                account: s.sender,
+                                token_a: '',
+                                token_b: '',
+                                amount_a: s.amount0.toString(),
+                                amount_b: s.amount1.toString(),
 
-    for await (const blocks of stream) {
-        const swapsCount = blocks.reduce((acc, { swaps }) => acc + swaps.length, 0)
-        const poolsCount = blocks.reduce((acc, { pools }) => acc + pools.length, 0)
+                                block_number: s.rawEvent.block.header.number,
+                                transaction_index: s.rawEvent.transactionIndex,
+                                log_index: s.rawEvent.logIndex,
 
-        const swaps = blocks.flatMap((b) => b.swaps)
-        if (swaps[0]) {
-            console.log('SWAP EXAMPLE', swaps[0])
-        }
-        console.log(`${swapsCount} swaps and ${poolsCount} pools for ${blocks.length} blocks`)
-    }
+                                sign: 1,
+                            })),
+                        format: 'JSONEachRow',
+                    })
+                },
+                onRollback: async ({ store, cursor }) => {
+                    await store.removeAllRows({
+                        table: 'swaps_raw',
+                        where: 'block_number > {block_number:UInt32}',
+                        params: { block_number: cursor.number },
+                    })
+                },
+            }),
+        )
 }
 
 void main()

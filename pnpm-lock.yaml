@@ -212,8 +212,8 @@ importers:
         specifier: workspace:^
         version: link:../../packages/targets/typeorm
       '@clickhouse/client':
-        specifier: ^1.11.2
-        version: 1.11.2
+        specifier: ^1.12.1
+        version: 1.12.1
       '@solana/web3.js':
         specifier: ^1.98.4
         version: 1.98.4(typescript@5.5.4)
@@ -590,11 +590,22 @@ packages:
     resolution: {integrity: sha512-H4ECHqaipzMgiZKqpb1Z4N3Ofq+lVTCn8I59XsSynqrsfR4jWZD3PipXVvIzMpDmTMvrlJWrOwAdm0DMNiMQbA==}
     dev: false
 
+  /@clickhouse/client-common@1.12.1:
+    resolution: {integrity: sha512-ccw1N6hB4+MyaAHIaWBwGZ6O2GgMlO99FlMj0B0UEGfjxM9v5dYVYql6FpP19rMwrVAroYs/IgX2vyZEBvzQLg==}
+    dev: false
+
   /@clickhouse/client@1.11.2:
     resolution: {integrity: sha512-ZE7Q1qxsDNXCkGPf1zqmhpZpwAKxKT+1s4Z432J1Mb2Gm26Y4tG/sJoug81AfAJTt6s7taO2vzNBAKfSR3SStg==}
     engines: {node: '>=16'}
     dependencies:
       '@clickhouse/client-common': 1.11.2
+    dev: false
+
+  /@clickhouse/client@1.12.1:
+    resolution: {integrity: sha512-7ORY85rphRazqHzImNXMrh4vsaPrpetFoTWpZYueCO2bbO6PXYDXp/GQ4DgxnGIqbWB/Di1Ai+Xuwq2o7DJ36A==}
+    engines: {node: '>=16'}
+    dependencies:
+      '@clickhouse/client-common': 1.12.1
     dev: false
 
   /@esbuild-kit/cjs-loader@2.4.4:

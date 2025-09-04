@@ -13,7 +13,7 @@
         "@subsquid/evm-abi": "^0.3.1",
         "@subsquid/evm-codec": "^0.3.0",
         "@belopash/typeorm-target": "workspace:^",
-        "@clickhouse/client": "^1.11.2",
+        "@clickhouse/client": "^1.12.1",
         "@solana/web3.js": "^1.98.4",
         "@subsquid/borsh": "^0.3.0",
         "@subsquid/typeorm-store": "^1.5.1",

@@ -1,9 +1,9 @@
 import type { BlockRef } from '@belopash/core'
 import { createTransformer } from '@belopash/core'
 import type { EvmQueryBuilder } from '@belopash/evm-stream'
-import type * as poolAbi from './abi/pool'
 
-type Swap = ReturnType<typeof poolAbi.events.Swap.decode>
+import type { Swap } from './uniswap-v3-swaps'
+
 type SwapExtended = Swap & { price: string }
 
 export function swapPriceExtension<Pipe extends { swaps: Swap[] }>() {

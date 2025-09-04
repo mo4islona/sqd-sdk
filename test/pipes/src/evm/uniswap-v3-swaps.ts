@@ -1,29 +1,33 @@
 import type { BlockRef } from '@belopash/core'
 import { createTransformer } from '@belopash/core'
-import { type Block, EvmQueryBuilder } from '@belopash/evm-stream'
+import { type Block, EvmQueryBuilder, type Log } from '@belopash/evm-stream'
 import { type BlockRange, parseRange } from '../block-range'
 import * as poolAbi from './abi/pool'
 
-type Swap = ReturnType<typeof poolAbi.events.Swap.decode>
+const fields = {
+    log: {
+        address: true,
+        topics: true,
+        data: true,
+        transactionIndex: true,
+        transactionHash: true,
+        logIndex: true,
+    },
+    transaction: {
+        hash: true,
+        transactionIndex: true,
+    },
+} as const
+
+export type Swap = {
+    id: string
+    timestamp: Date
+    rawEvent: Log<typeof fields>
+} & ReturnType<typeof poolAbi.events.Swap.decode>
 
 export function uniswapV3Swaps<Pipe>({ range }: { range?: BlockRange }) {
     const { from, to } = parseRange({ range, defaultFrom: 12369621 })
-
-    const fields = {
-        log: {
-            address: true,
-            topics: true,
-            data: true,
-            transactionIndex: true,
-            transactionHash: true,
-            logIndex: true,
-        },
-        transaction: {
-            hash: true,
-            transactionIndex: true,
-        },
-    } as const
-
+    console.log({ from, to })
     const uniswapQuery = new EvmQueryBuilder().addFields(fields).addLog({
         range: { from, to },
         request: {
@@ -54,7 +58,14 @@ export function uniswapV3Swaps<Pipe>({ range }: { range?: BlockRange }) {
                                         ...v,
                                         swaps: v.logs
                                             .filter((log) => poolAbi.events.Swap.is(log))
-                                            .map((log) => poolAbi.events.Swap.decode(log)),
+                                            .map((log) => {
+                                                return {
+                                                    ...poolAbi.events.Swap.decode(log),
+                                                    id: log.id,
+                                                    timestamp: new Date(v.header.timestamp * 1000),
+                                                    rawEvent: log,
+                                                }
+                                            }),
                                     })),
                                 }
                             }),

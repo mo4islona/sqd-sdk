@@ -1,0 +1,23 @@
+volumes:
+  sdk2-clickhouse-db:
+services:
+  clickhouse:
+    image: bitnami/clickhouse:25.7.5
+    logging:
+      driver: none
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - sdk2-clickhouse-db:/bitnami/clickhouse
+    environment:
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=default
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge 
